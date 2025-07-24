@@ -1,4 +1,4 @@
-# 📊 Copilot Usage Analysis Web Tool
+# 📊 Copilot Analyst Web Tool
 
 A sleek, real-time web application for analyzing Microsoft Copilot usage reports. This tool processes all data in-memory, provides live progress updates, and allows for direct downloads of generated Excel and HTML reports.
 
