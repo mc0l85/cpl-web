@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Copilot Analyst</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.3/dist/cyborg/bootstrap.min.css">
+    <style>
+        :root { --neon-green: #39FF14; }
+        body { background-color: #2a2a2a; } /* Changed background to dark grey */
+        .monitor-frame { background-color: black; border: 3px solid var(--neon-green); border-radius: 15px; padding: 1.5rem 2rem; width: 100%; max-width: 1920px; min-height: 90vh; margin: 2rem auto; box-shadow: 0 0 25px rgba(57, 255, 20, 0.3); display: flex; flex-direction: column; overflow: hidden; }
+        .monitor-content { flex-grow: 1; overflow-y: auto; padding-right: 15px; }
+        .monitor-content::-webkit-scrollbar { width: 8px; }
+        .monitor-content::-webkit-scrollbar-track { background: #222; }
+        .monitor-content::-webkit-scrollbar-thumb { background: var(--neon-green); border-radius: 4px; }
+        .nav-tabs .nav-link.active { background-color: var(--neon-green); border-color: var(--neon-green); color: black; font-weight: bold; }
+        .btn-success { background-color: var(--neon-green); border-color: var(--neon-green); color: black; font-weight: bold; }
+        .btn-success:hover { background-color: white; border-color: white; color: black; }
+        .progress-bar { background-color: var(--neon-green); }
+        .card { border-color: var(--neon-green); background-color: #060606; }
+        .card-header { background-color: #2a2a2a; border-bottom: 1px solid var(--neon-green); }
+        .metric-card { text-align: center; padding: 1rem; border-radius: .5rem; color: white; background-color: #3a3a3a; border: 1px solid #333; display: flex; flex-direction: column; justify-content: center; height: 100%; }
+        .metric-card h1 { font-size: 3rem; }
+        #deep-dive-results, .chart-container { background-color: #060606 !important; border: 1px solid var(--neon-green); }
+        .chart-container { display: flex; align-items: center; justify-content: center; min-height: 300px; }
+    </style>
+</head>
+<body>
+    <div class="monitor-frame">
+        <div class="monitor-content">
+            <h3 class="mb-4">Copilot Usage Analysis Tool</h3>
+            <ul class="nav nav-tabs" id="myTab" role="tablist">
+                <li class="nav-item" role="presentation"><button class="nav-link active" id="analysis-tab" data-bs-toggle="tab" data-bs-target="#analysis-pane" type="button" role="tab">Analysis</button></li>
+                <li class="nav-item" role="presentation"><button class="nav-link" id="deepdive-tab" data-bs-toggle="tab" data-bs-target="#deepdive-pane" type="button" role="tab">Deep Dive</button></li>
+            </ul>
+            <div class="tab-content" id="myTabContent">
+                <!-- ANALYSIS TAB -->
+                <div class="tab-pane fade show active p-3" id="analysis-pane" role="tabpanel">
+                    <div class="row g-4 h-100">
+                        <div class="col-lg-4 d-flex flex-column">
+                            <div class="card mb-4"><div class="card-header fw-bold">1. Select Input Files</div><div class="card-body"><div class="mb-3"><label for="targetUsersFile" class="form-label">Target Users File (Optional CSV)</label><input class="form-control" type="file" id="targetUsersFile" accept=".csv,.txt"><div id="target-file-status" class="form-text"></div></div><div><label for="usageReports" class="form-label">Usage Reports (CSV/Excel)</label><input class="form-control" type="file" id="usageReports" accept=".csv,.xlsx,.xls" multiple><div id="usage-files-status" class="form-text"></div></div></div></div>
+                            <div class="mt-auto"><div class="d-grid gap-2"><button id="run-analysis-btn" class="btn btn-lg btn-success">Run Analysis</button></div><p id="status-label" class="mt-2 text-center"></p><div id="reports-container" class="mt-4 d-grid" style="display: none;"><button id="download-btn" class="btn btn-primary btn-lg"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-download me-2" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>Download Outputs</button></div></div>
+                        </div>
+                        <div class="col-lg-8 d-flex flex-column">
+                            <div class="card mb-4"><div class="card-header fw-bold">2. Apply Filters (Optional)</div><div class="card-body"><div class="row"><div class="col-md-6 mb-3"><label for="company-filter" class="form-label">Company</label><select multiple class="form-select" id="company-filter" size="5"></select></div><div class="col-md-6 mb-3"><label for="department-filter" class="form-label">Department</label><select multiple class="form-select" id="department-filter" size="5"></select></div><div class="col-md-6"><label for="location-filter" class="form-label">Location (City)</label><select multiple class="form-select" id="location-filter" size="5"></select></div><div class="col-md-6"><label for="manager-filter" class="form-label">Manager</label><select multiple class="form-select" id="manager-filter" size="5"></select></div></div></div></div>
+                            <div class="card flex-grow-1"><div class="card-header fw-bold">3. Analysis Snapshot</div><div class="card-body"><div class="row text-center g-3 h-100">
+                                <div class="col-md-3">
+                                    <div class="metric-card w-100">
+                                        <h1 id="total-users" class="display-4 fw-bold">0</h1>
+                                        <p class="mb-0">Total Users</p>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="metric-card" id="top-utilizers-chart"></div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="metric-card" id="under-utilized-chart"></div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="metric-card" id="reallocate-chart"></div>
+                                </div>
+                            </div></div></div>
+                        </div>
+                    </div>
+                </div>
+                <!-- DEEP DIVE TAB -->
+                <div class="tab-pane fade p-3" id="deepdive-pane" role="tabpanel">
+                     <div class="card"><div class="card-header fw-bold">User Search</div><div class="card-body"><p>Enter a user's email for a detailed analysis. Run an analysis on the 'Analysis' tab first to load data.</p><div class="input-group mb-3"><input type="email" id="user-email-entry" class="form-control" placeholder="user@example.com"><button class="btn btn-success" type="button" id="search-btn">Search</button></div>
+                     <!-- THIS IS THE UPDATED LAYOUT -->
+                     <div class="row mt-4">
+                         <div class="col-md-5">
+                             <h6>Statistics & Details</h6>
+                             <pre id="deep-dive-results" class="p-3 rounded" style="min-height: 450px;"></pre>
+                         </div>
+                         <div class="col-md-7">
+                             <h6>Complexity Trends</h6>
+                             <div id="deep-dive-chart-container" class="p-2 rounded" style="min-height: 350px; border: 1px solid var(--neon-green);"></div>
+                         </div>
+                     </div>
+                     </div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>
