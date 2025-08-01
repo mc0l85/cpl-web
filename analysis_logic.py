@@ -37,20 +37,40 @@ class AnalysisRunner:
         return user_history_df['Report Refresh Date'].iloc[0]
 
     def get_manager_classification(self, row):
-        today = datetime.strptime('2025-07-31', '%Y-%m-%d')
+        # Use the max report date as reference for consistency
+        today = self.reference_date
         last_seen = pd.to_datetime(row['Overall Recency']) if pd.notna(row['Overall Recency']) else pd.NaT
         first_seen = pd.to_datetime(row.get('Adoption Date')) if pd.notna(row.get('Adoption Date')) else (pd.to_datetime(row['First Appearance']) if pd.notna(row['First Appearance']) else pd.NaT)
         if pd.notna(first_seen) and (today - first_seen).days < 90:
             return "New User"
         if pd.notna(last_seen) and (today - last_seen).days > 90:
             return "License Recapture"
-        if row['Usage Consistency (%)'] > 75 and row['Usage Complexity'] > 10:
+        
+        # Use adjusted consistency for classification
+        consistency_metric = row['Adjusted Consistency (%)']
+        
+        if consistency_metric > 75 and row['Usage Complexity'] > 10:
             return "Power User"
-        if row['Usage Consistency (%)'] > 75:
+        if consistency_metric > 75:
             return "Consistent User"
-        if row['Usage Consistency (%)'] > 25:
+        if consistency_metric > 25:
             return "Coaching Opportunity"
         return "License Recapture"
+
+    def get_justification(self, row):
+        classification = row['Classification']
+        if classification == "New User":
+            return "User is in their first 90 days and is still learning the tool."
+        if classification == "License Recapture":
+            return "User has not shown any activity in the last 90 days and their license could be reallocated."
+        if classification == "Power User":
+            return "User demonstrates high consistency and leverages a wide range of tools, indicating strong engagement."
+        if classification == "Consistent User":
+            return "User is highly active and has integrated the tool into their regular workflow."
+        if classification == "Coaching Opportunity":
+            return "User is active but inconsistent. Further coaching could help them maximize the tool's benefits."
+        return ""
+
     def execute_analysis(self, usage_file_paths, target_user_path, filters):
         try:
             self.update_status("1. Loading usage reports from server...")
@@ -98,6 +118,7 @@ class AnalysisRunner:
             matched_users_df = usage_df[usage_df['User Principal Name'].isin(utilized_emails)].copy()
             copilot_tool_cols = [col for col in matched_users_df.columns if 'Last activity date of' in col]
             min_report_date, max_report_date = usage_df['Report Refresh Date'].min(), usage_df['Report Refresh Date'].max()
+            self.reference_date = max_report_date  # Set reference date for consistent calculations
             total_months_in_period = (max_report_date.year - min_report_date.year) * 12 + max_report_date.month - min_report_date.month + 1
             user_metrics = []
             total_users = len(utilized_emails)
@@ -127,31 +148,193 @@ class AnalysisRunner:
                         first_activity = adoption_date
                     active_months = len(pd.to_datetime(activity_dates).to_period('M').unique())
                     complexity = user_data[copilot_tool_cols].notna().any().sum()
-                    monthly_activity = user_data[copilot_tool_cols].stack().dropna().reset_index().rename(columns={'level_1': 'Tool', 0: 'Date'})
-                    monthly_activity['Month'] = pd.to_datetime(monthly_activity['Date']).dt.to_period('M')
-                    avg_tools_per_month = monthly_activity.groupby('Month')['Tool'].nunique().mean() if not monthly_activity.empty else 0
+                    monthly_activity = user_data.groupby(pd.to_datetime(user_data['Report Refresh Date']).dt.to_period('M'))[copilot_tool_cols].apply(lambda x: x.notna().sum()).reset_index()
+                    monthly_activity.columns = ['Month'] + copilot_tool_cols
+                    # Calculate average tools per report correctly
+                    tools_per_report = user_data.groupby('Report Refresh Date')[copilot_tool_cols].apply(lambda x: x.notna().sum(axis=1).sum())
+                    avg_tools_per_month = tools_per_report.mean() if len(tools_per_report) > 0 else 0.0
+                    # Improved trend analysis with recent momentum
                     trend = "N/A"
+                    trend_details = {}
+                    
                     if len(activity_dates) > 1:
-                        trend = "Stable"
-                        timeline_midpoint = first_activity + (last_activity - first_activity) / 2
-                        first_half_activity, second_half_activity = monthly_activity[monthly_activity['Date'] <= timeline_midpoint], monthly_activity[monthly_activity['Date'] > timeline_midpoint]
-                        if not first_half_activity.empty and not second_half_activity.empty:
-                            if second_half_activity['Tool'].nunique() > first_half_activity['Tool'].nunique(): trend = "Increasing"
-                            elif second_half_activity['Tool'].nunique() < first_half_activity['Tool'].nunique(): trend = "Decreasing"
+                        # Get report-level activity
+                        report_activity = user_data.groupby('Report Refresh Date')[copilot_tool_cols].apply(
+                            lambda x: x.notna().sum(axis=1).sum()
+                        ).sort_index()
+                        
+                        if len(report_activity) >= 2:
+                            # Calculate different time windows
+                            last_30_days = self.reference_date - pd.Timedelta(days=30)
+                            last_60_days = self.reference_date - pd.Timedelta(days=60)
+                            last_90_days = self.reference_date - pd.Timedelta(days=90)
+                            
+                            # Get activity in different periods
+                            recent_activity = report_activity[report_activity.index > last_30_days]
+                            medium_activity = report_activity[(report_activity.index > last_60_days) & (report_activity.index <= last_30_days)]
+                            older_activity = report_activity[(report_activity.index > last_90_days) & (report_activity.index <= last_60_days)]
+                            
+                            # Calculate averages for each period
+                            recent_avg = recent_activity.mean() if len(recent_activity) > 0 else 0
+                            medium_avg = medium_activity.mean() if len(medium_activity) > 0 else 0
+                            older_avg = older_activity.mean() if len(older_activity) > 0 else 0
+                            
+                            # Determine trend based on momentum
+                            if recent_avg > 0:
+                                if medium_avg == 0 and older_avg == 0:
+                                    trend = "New Momentum"  # Just started using
+                                elif recent_avg > medium_avg * 1.2:
+                                    if medium_avg > older_avg * 1.2:
+                                        trend = "Accelerating"  # Increasing faster
+                                    else:
+                                        trend = "Recovering"  # Was declining, now increasing
+                                elif recent_avg < medium_avg * 0.8:
+                                    if medium_avg < older_avg * 0.8:
+                                        trend = "Declining"  # Decreasing consistently
+                                    else:
+                                        trend = "Cooling"  # Was increasing, now decreasing
+                                else:
+                                    trend = "Stable"
+                            elif medium_avg > 0:
+                                trend = "Dormant"  # Was active but stopped recently
+                            else:
+                                trend = "Inactive"  # No recent activity
+                            
+                            # Store detailed metrics for debugging
+                            trend_details = {
+                                'recent_avg': recent_avg,
+                                'medium_avg': medium_avg,
+                                'older_avg': older_avg
+                            }
                 consistency = (active_months / total_months_in_period) * 100 if total_months_in_period > 0 else 0
-                user_metrics.append({'Email': email, 'Usage Consistency (%)': consistency, 'Overall Recency': last_activity, 'Usage Complexity': complexity, 'Avg Tools / Report': avg_tools_per_month, 'Usage Trend': trend, 'Appearances': user_data['Report Refresh Date'].nunique(), 'First Appearance': first_activity, 'Adoption Date': adoption_date, 'is_reactivated': is_reactivated})
+                
+                # Calculate license-aware metrics with improved approach
+                license_start = adoption_date if pd.notna(adoption_date) else first_activity
+                tool_expansion_rate = 0
+                if pd.notna(license_start):
+                    days_since_license = (self.reference_date - license_start).days + 1  # Add 1 to include start day
+                    adoption_velocity = complexity / max(days_since_license, 1)  # Tools per day
+                    
+                    # Calculate tool expansion rate (tools adopted per month)
+                    if days_since_license > 30:  # Only calculate for users with at least 30 days
+                        months_since_start = max(1, days_since_license / 30)
+                        tool_expansion_rate = complexity / months_since_start
+                    
+                    # Improved consistency calculation with minimum evaluation period
+                    # Only adjust consistency for users with less than minimum period
+                    min_evaluation_days = 60  # Minimum 60 days for fair evaluation
+                    if days_since_license <= min_evaluation_days:
+                        # For new users, use a blended approach to prevent inflated scores
+                        adjusted_consistency = (consistency * 0.7) + (min(100, (active_months / max(1, days_since_license / 30)) * 100) * 0.3)
+                    else:
+                        # For established users, use a balanced approach that considers both overall and recent patterns
+                        months_since_license = (self.reference_date.year - license_start.year) * 12 + self.reference_date.month - license_start.month + 1
+                        months_since_license = max(1, months_since_license)
+                        raw_adjusted_consistency = (active_months / months_since_license) * 100 if months_since_license > 0 else 0
+                        # Blend overall consistency with adjusted consistency
+                        adjusted_consistency = (consistency * 0.6) + (raw_adjusted_consistency * 0.4)
+                else:
+                    adjusted_consistency = consistency
+                    adoption_velocity = 0
+                    days_since_license = 0
+                    tool_expansion_rate = 0                
+                user_metrics.append({
+                     'Email': email, 
+                     'Usage Consistency (%)': consistency,
+                     'Adjusted Consistency (%)': adjusted_consistency,
+                     'Overall Recency': last_activity, 
+                     'Usage Complexity': complexity, 
+                     'Avg Tools / Report': avg_tools_per_month, 
+                     'Adoption Velocity': adoption_velocity,
+                     'Tool Expansion Rate': tool_expansion_rate,
+                     'Days Since License': days_since_license,
+                     'Usage Trend': trend,
+                     'Trend Details': trend_details,
+                     'Appearances': user_data['Report Refresh Date'].nunique(), 
+                     'First Appearance': first_activity, 
+                     'Adoption Date': adoption_date, 
+                     'is_reactivated': is_reactivated
+                 })
             self.utilized_metrics_df = pd.DataFrame(user_metrics)
             if self.utilized_metrics_df.empty: return {'error': "No data available for the selected users."}
-            max_consistency, max_complexity, max_avg_complexity = self.utilized_metrics_df['Usage Consistency (%)'].max(), self.utilized_metrics_df['Usage Complexity'].max(), self.utilized_metrics_df['Avg Tools / Report'].max()
-            self.utilized_metrics_df['consistency_norm'] = self.utilized_metrics_df['Usage Consistency (%)'] / max_consistency if max_consistency > 0 else 0
+            # Ensure numeric dtype to avoid Series truth-value ambiguity
+            self.utilized_metrics_df['Usage Consistency (%)'] = pd.to_numeric(self.utilized_metrics_df['Usage Consistency (%)'], errors='coerce').fillna(0)
+            self.utilized_metrics_df['Adjusted Consistency (%)'] = pd.to_numeric(self.utilized_metrics_df['Adjusted Consistency (%)'], errors='coerce').fillna(0)
+            self.utilized_metrics_df['Usage Complexity'] = pd.to_numeric(self.utilized_metrics_df['Usage Complexity'], errors='coerce').fillna(0)
+            self.utilized_metrics_df['Adoption Velocity'] = pd.to_numeric(self.utilized_metrics_df['Adoption Velocity'], errors='coerce').fillna(0)
+            if 'Avg Tools / Report' in self.utilized_metrics_df.columns:
+                # If this column contains Series per-row, replace non-scalars with NaN before numeric cast
+                self.utilized_metrics_df['Avg Tools / Report'] = self.utilized_metrics_df['Avg Tools / Report'].apply(lambda v: v if np.isscalar(v) else np.nan)
+                self.utilized_metrics_df['Avg Tools / Report'] = pd.to_numeric(self.utilized_metrics_df['Avg Tools / Report'], errors='coerce').fillna(0)
+            else:
+                self.utilized_metrics_df['Avg Tools / Report'] = 0.0
+            
+            # Calculate recency factor (decay over time)
+            self.utilized_metrics_df['days_since_last_activity'] = (self.reference_date - pd.to_datetime(self.utilized_metrics_df['Overall Recency'])).dt.days
+            self.utilized_metrics_df['recency_factor'] = np.exp(-self.utilized_metrics_df['days_since_last_activity'] / 30)  # 30-day half-life
+            
+            # Normalize metrics
+            max_adj_consistency = float(self.utilized_metrics_df['Adjusted Consistency (%)'].max())
+            max_complexity = float(self.utilized_metrics_df['Usage Complexity'].max())
+            max_avg_complexity = float(self.utilized_metrics_df['Avg Tools / Report'].max())
+            max_adoption_velocity = float(self.utilized_metrics_df['Adoption Velocity'].max())
+            max_tool_expansion = float(self.utilized_metrics_df['Tool Expansion Rate'].max())
+            
+            self.utilized_metrics_df['adj_consistency_norm'] = self.utilized_metrics_df['Adjusted Consistency (%)'] / max_adj_consistency if max_adj_consistency > 0 else 0
             self.utilized_metrics_df['complexity_norm'] = self.utilized_metrics_df['Usage Complexity'] / max_complexity if max_complexity > 0 else 0
             self.utilized_metrics_df['avg_complexity_norm'] = self.utilized_metrics_df['Avg Tools / Report'] / max_avg_complexity if max_avg_complexity > 0 else 0
-            self.utilized_metrics_df['Engagement Score'] = self.utilized_metrics_df['consistency_norm'] + self.utilized_metrics_df['complexity_norm'] + self.utilized_metrics_df['avg_complexity_norm']
-            self.utilized_metrics_df = self.utilized_metrics_df.sort_values(by=["Engagement Score", "Usage Complexity", "Usage Consistency (%)", "Overall Recency", "Email"], ascending=[False, False, False, False, True]).reset_index(drop=True)
+            self.utilized_metrics_df['adoption_velocity_norm'] = self.utilized_metrics_df['Adoption Velocity'] / max_adoption_velocity if max_adoption_velocity > 0 else 0
+            self.utilized_metrics_df['tool_expansion_norm'] = self.utilized_metrics_df['Tool Expansion Rate'] / max_tool_expansion if max_tool_expansion > 0 else 0
+            
+            # Add trend momentum factor
+            trend_multipliers = {
+                'Accelerating': 1.15,
+                'Recovering': 1.10,
+                'New Momentum': 1.10,
+                'Stable': 1.0,
+                'Cooling': 0.95,
+                'Declining': 0.90,
+                'Dormant': 0.85,
+                'Inactive': 0.80,
+                'Increasing': 1.05,  # Legacy
+                'Decreasing': 0.95,  # Legacy
+                'N/A': 1.0
+            }
+            self.utilized_metrics_df['trend_multiplier'] = self.utilized_metrics_df['Usage Trend'].map(trend_multipliers).fillna(1.0)
+            
+            # New weighted engagement score with better differentiation
+            # Weights: Adjusted Consistency (25%), Overall Consistency (15%), Avg Tools/Report (20%), 
+            # Breadth (10%), Tool Expansion Rate (10%), Recency (20%)
+            # Include both adjusted and overall consistency to maintain balance
+            # Add tool expansion rate to penalize flat usage patterns
+            base_score = (
+                self.utilized_metrics_df['adj_consistency_norm'] * 0.25 +
+                (self.utilized_metrics_df['Usage Consistency (%)'] / max_adj_consistency if max_adj_consistency > 0 else 0) * 0.15 +
+                self.utilized_metrics_df['avg_complexity_norm'] * 0.20 +
+                self.utilized_metrics_df['complexity_norm'] * 0.10 +
+                self.utilized_metrics_df['tool_expansion_norm'] * 0.10 +
+                self.utilized_metrics_df['recency_factor'] * 0.20
+            )
+            
+            # Apply trend multiplier more aggressively
+            self.utilized_metrics_df['Engagement Score'] = base_score * self.utilized_metrics_df['trend_multiplier']
+            
+            # Scale scores to 0-100 range for better readability
+            min_score = self.utilized_metrics_df['Engagement Score'].min()
+            max_score = self.utilized_metrics_df['Engagement Score'].max()
+            if max_score > min_score:
+                self.utilized_metrics_df['Engagement Score'] = (
+                    (self.utilized_metrics_df['Engagement Score'] - min_score) / (max_score - min_score) * 100
+                )
+            # Sort by engagement score, then by adjusted consistency, then recency
+            self.utilized_metrics_df = self.utilized_metrics_df.sort_values(
+                by=["Engagement Score", "Adjusted Consistency (%)", "Avg Tools / Report", "Overall Recency", "Email"], 
+                ascending=[False, False, False, False, True]
+            ).reset_index(drop=True)
             self.utilized_metrics_df['Global Rank'] = self.utilized_metrics_df.index + 1
             self.update_status("3. Classifying users...")
             self.utilized_metrics_df['Classification'] = self.utilized_metrics_df.apply(self.get_manager_classification, axis=1)
-            self.utilized_metrics_df['Justification'] = self.utilized_metrics_df['Classification']
+            self.utilized_metrics_df['Justification'] = self.utilized_metrics_df.apply(self.get_justification, axis=1)
             reallocation_df, under_utilized_df, top_utilizers_df = self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'For Reallocation'], self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'Under-Utilized'], self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'Top Utilizer']
             self.update_status("4. Generating reports in memory...")
             excel_bytes = self.create_excel_report(top_utilizers_df, under_utilized_df, reallocation_df, self.utilized_metrics_df)
@@ -172,10 +355,19 @@ class AnalysisRunner:
                             f.write(f"{email}\n")
                             f.write(f"Classification: {r['Classification']}\n")
                             f.write(f"Justification: {r['Justification']}\n")
-                            f.write(f"Usage Consistency: {r['Usage Consistency (%)']:.1f}%\n")
+                            f.write(f"Adjusted Consistency: {r['Adjusted Consistency (%)']:.1f}%\n")
+                            f.write(f"Original Consistency: {r['Usage Consistency (%)']:.1f}%\n")
                             f.write(f"Usage Complexity: {int(r['Usage Complexity'])}\n")
+                            f.write(f"Avg Tools/Report: {r['Avg Tools / Report']:.2f}\n")
+                            f.write(f"Adoption Velocity: {r['Adoption Velocity']:.4f} tools/day\n")
+                            f.write(f"Days Since License: {int(r['Days Since License']) if pd.notna(r.get('Days Since License')) else 'N/A'}\n")
                             f.write(f"Engagement Score: {r['Engagement Score']:.2f}\n")
                             f.write(f"Usage Trend: {r['Usage Trend']}\n")
+                            if 'Trend Details' in r and r['Trend Details']:
+                                details = r['Trend Details']
+                                f.write(f"  - Last 30 days avg: {details.get('recent_avg', 0):.2f} tools/report\n")
+                                f.write(f"  - 31-60 days avg: {details.get('medium_avg', 0):.2f} tools/report\n")
+                                f.write(f"  - 61-90 days avg: {details.get('older_avg', 0):.2f} tools/report\n")
                             adoption = r['Adoption Date'].strftime('%Y-%m-%d') if ('Adoption Date' in r and pd.notna(r['Adoption Date'])) else 'N/A'
                             first_seen = r['First Appearance'].strftime('%Y-%m-%d') if pd.notna(r['First Appearance']) else 'N/A'
                             last_seen = r['Overall Recency'].strftime('%Y-%m-%d') if pd.notna(r['Overall Recency']) else 'N/A'
@@ -232,15 +424,19 @@ class AnalysisRunner:
             col_letter = get_column_letter(df.columns.get_loc('Engagement Score') + 1)
             cell_range = f"{col_letter}2:{col_letter}{len(df)+1}"
             worksheet.conditional_formatting.add(cell_range, ColorScaleRule(start_type='min', start_color=red, mid_type='percentile', mid_value=50, mid_color=yellow, end_type='max', end_color=green))
-        if 'Usage Consistency (%)' in df.columns:
-            col_letter = get_column_letter(df.columns.get_loc('Usage Consistency (%)') + 1)
+        if 'Adjusted Consistency (%)' in df.columns:
+            col_letter = get_column_letter(df.columns.get_loc('Adjusted Consistency (%)') + 1)
             cell_range = f"{col_letter}2:{col_letter}{len(df)+1}"
             worksheet.conditional_formatting.add(cell_range, DataBarRule(start_type='min', end_type='max', color=green))
+        if 'Adoption Velocity' in df.columns:
+            col_letter = get_column_letter(df.columns.get_loc('Adoption Velocity') + 1)
+            cell_range = f"{col_letter}2:{col_letter}{len(df)+1}"
+            worksheet.conditional_formatting.add(cell_range, ColorScaleRule(start_type='min', start_color=yellow, mid_type='percentile', mid_value=50, mid_color=yellow, end_type='max', end_color=green))
 
     def create_excel_report(self, top_df, under_df, realloc_df, all_df=None):
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            cols = ['Global Rank', 'Email', 'Classification', 'Usage Consistency (%)', 'Overall Recency', 'Usage Complexity', 'Avg Tools / Report', 'Usage Trend', 'Engagement Score', 'Justification']
+            cols = ['Global Rank', 'Email', 'Classification', 'Adjusted Consistency (%)', 'Usage Consistency (%)', 'Overall Recency', 'Usage Complexity', 'Avg Tools / Report', 'Adoption Velocity', 'Tool Expansion Rate', 'Days Since License', 'Usage Trend', 'Engagement Score', 'Justification']
             sheets = {
                 'Leaderboard': pd.concat([top_df, under_df, realloc_df]).sort_values(by="Global Rank") if not (top_df.empty and under_df.empty and realloc_df.empty) else (all_df.sort_values(by="Global Rank") if all_df is not None else pd.DataFrame()),
             }
@@ -296,8 +492,15 @@ class AnalysisRunner:
                 .rank-badge { font-weight: 700; width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; border-radius: 50%; color: #000; }
                 .progress-bar-container { background-color: #e5e7eb; border-radius: 9999px; height: 8px; width: 100%; }
                 .progress-bar { background: #39FF14; border-radius: 9999px; height: 100%; }
-                .trend-icon.Increasing { color: #16a34a; }
+                .trend-icon.Accelerating { color: #16a34a; }
+                .trend-icon.Recovering { color: #22c55e; }
+                .trend-icon.New.Momentum { color: #3b82f6; }
                 .trend-icon.Stable { color: #f59e0b; }
+                .trend-icon.Cooling { color: #f97316; }
+                .trend-icon.Declining { color: #ef4444; }
+                .trend-icon.Dormant { color: #a855f7; }
+                .trend-icon.Inactive { color: #6b7280; }
+                .trend-icon.Increasing { color: #16a34a; }
                 .trend-icon.Decreasing { color: #ef4444; }
                 .trend-icon.N\/A { color: #6b7280; }
                 .neon-green-text { color: #16a34a; }
@@ -326,17 +529,32 @@ class AnalysisRunner:
         '''
         
         html_rows = ""
-        max_score = leaderboard_data['Engagement Score'].max() if not leaderboard_data.empty else 3.0
+        max_score = leaderboard_data['Engagement Score'].max() if not leaderboard_data.empty else 100.0
+        max_consistency = leaderboard_data['Adjusted Consistency (%)'].max() if not leaderboard_data.empty else 100.0
         
         for _, user_row in leaderboard_data.iterrows():
             if pd.isna(user_row['Email']): continue
             
             rank = int(user_row['Global Rank'])
-            score_percentage = (user_row['Engagement Score'] / max_score) * 100 if max_score > 0 else 0
-            hue = score_percentage * 1.2
+            # Use rank position for color calculation instead of score
+            total_users = len(leaderboard_data)
+            rank_percentage = ((total_users - rank + 1) / total_users) * 100
+            hue = rank_percentage * 1.2  # Green for top ranks, red for bottom
             badge_color = f"hsl({hue}, 80%, 50%)"
             trend = user_row['Usage Trend']
-            trend_icon_map = {'Increasing': 'fa-arrow-trend-up', 'Decreasing': 'fa-arrow-trend-down', 'Stable': 'fa-minus', 'N/A': 'fa-question'}
+            trend_icon_map = {
+                'Accelerating': 'fa-rocket',
+                'Recovering': 'fa-arrow-trend-up', 
+                'Stable': 'fa-minus',
+                'Cooling': 'fa-arrow-trend-down',
+                'Declining': 'fa-angles-down',
+                'New Momentum': 'fa-bolt',
+                'Dormant': 'fa-pause',
+                'Inactive': 'fa-stop',
+                'Increasing': 'fa-arrow-trend-up',  # Legacy support
+                'Decreasing': 'fa-arrow-trend-down',  # Legacy support
+                'N/A': 'fa-question'
+            }
             trend_icon = f"fa-solid {trend_icon_map.get(trend, 'fa-minus')}"
             
             html_rows += f'''
@@ -344,8 +562,8 @@ class AnalysisRunner:
                 <div class="col-span-1"><div class="rank-badge" style="background-color: {badge_color};"><span>{rank}</span></div></div>
                 <div class="col-span-5"><div class="user-email">{user_row['Email']}</div></div>
                 <div class="col-span-2 text-center">
-                    <div class="text-sm font-semibold neon-green-text">{user_row['Usage Consistency (%)']:.1f}%</div>
-                    <div class="progress-bar-container mt-1"><div class="progress-bar" style="width: {user_row['Usage Consistency (%)']}%"></div></div>
+                    <div class="text-sm font-semibold neon-green-text">{user_row['Adjusted Consistency (%)']:.1f}%</div>
+                    <div class="progress-bar-container mt-1"><div class="progress-bar" style="width: {min(100, (user_row['Adjusted Consistency (%)'] / max_consistency) * 100):.1f}%"></div></div>
                 </div>
                 <div class="col-span-2 text-center"><i class="trend-icon {trend} {trend_icon} fa-lg"></i></div>
                 <div class="col-span-2 text-right"><div class="text-sm font-bold neon-green-text">{user_row['Engagement Score']:.2f}</div></div>
