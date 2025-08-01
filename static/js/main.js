@@ -129,6 +129,7 @@ document.addEventListener("DOMContentLoaded", function() {
         updateChart(reallocateChart, reallocate, total);
         
         reportDataForDownload = data.reports;
+        reportDataForDownload.excel_bytes = undefined;
         reportsContainer.style.display = 'block';
     });
 
@@ -181,11 +182,8 @@ document.addEventListener("DOMContentLoaded", function() {
         // --- THIS IS THE FIX ---
         // Use the report data that was saved in the browser
         if (reportDataForDownload) {
-            const excel_b64 = btoa(new Uint8Array(reportDataForDownload.excel_bytes).reduce((data, byte) => data + String.fromCharCode(byte), ''));
-            const html_b64 = btoa(reportDataForDownload.html_string);
-            
-            triggerDownload(excel_b64, `Copilot Analysis Report.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            setTimeout(() => triggerDownload(html_b64, 'leaderboard.html', 'text/html'), 500);
+            triggerDownload(reportDataForDownload.excel_b64, `Copilot Analysis Report.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            setTimeout(() => triggerDownload(reportDataForDownload.html_b64, 'leaderboard.html', 'text/html'), 500);
         } else {
             alert('No report data available to download.');
         }

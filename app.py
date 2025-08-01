@@ -6,7 +6,7 @@ from flask_socketio import SocketIO, emit
 import pandas as pd
 import base64
 import io
-import matplotlib.pyplot as plt
+# removed unused matplotlib import
 from analysis_logic import AnalysisRunner
 import traceback
 
@@ -71,6 +71,19 @@ def handle_upload():
         session.modified = True
         return jsonify({'status': 'success', 'type': 'usage', 'filename': file.filename})
 
+@app.before_request
+def clear_stale_temp():
+    if getattr(app, "_temp_cleared", False):
+        return
+    if os.path.exists(app.config['TEMP_FOLDER']):
+        for entry in os.listdir(app.config['TEMP_FOLDER']):
+            path = os.path.join(app.config['TEMP_FOLDER'], entry)
+            try:
+                shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
+            except Exception:
+                pass
+    app._temp_cleared = True
+
 @socketio.on('connect')
 def handle_connect():
     print(f"Client connected: {request.sid}")
@@ -128,9 +141,10 @@ def run_analysis_and_emit(runner, usage_file_paths, target_file_path, filters, s
         deep_dive_path = os.path.join(session_folder, 'deep_dive_data.pkl')
         pd.to_pickle(deep_dive_data, deep_dive_path)
         
-        # --- THIS IS THE FIX ---
-        # Send the entire results payload, including reports, directly to the client
-        socketio.emit('analysis_complete', results, to=sid)
+        excel_b64 = base64.b64encode(results['reports']['excel_bytes']).decode('ascii')
+        html_b64 = base64.b64encode(results['reports']['html_string'].encode('utf-8')).decode('ascii')
+        payload = { 'dashboard': results['dashboard'], 'reports': { 'excel_b64': excel_b64, 'html_b64': html_b64 } }
+        socketio.emit('analysis_complete', payload, to=sid)
 
 @socketio.on('perform_deep_dive')
 def handle_deep_dive(data):

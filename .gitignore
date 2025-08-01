@@ -1,2 +1,4 @@
 temp_uploads/
 __pycache__/
+*.xlsx
+*.html

@@ -64,15 +64,20 @@ class AnalysisRunner:
                 self.update_status("Applying filters...")
                 target_df = pd.read_csv(target_user_path, encoding='utf-8-sig')
                 target_df['UserPrincipalName'] = target_df['UserPrincipalName'].str.lower()
-                if filters.get('companies'): target_df = target_df[target_df['Company'].isin(filters['companies'])]
-                if filters.get('departments'): target_df = target_df[target_df['Department'].isin(filters['departments'])]
-                if filters.get('locations'): target_df = target_df[target_df['City'].isin(filters['locations'])]
+                if filters.get('companies'):
+                    vals = set([v.lower() for v in filters['companies']])
+                    target_df = target_df[target_df['Company'].str.lower().isin(vals)]
+                if filters.get('departments'):
+                    vals = set([v.lower() for v in filters['departments']])
+                    target_df = target_df[target_df['Department'].str.lower().isin(vals)]
+                if filters.get('locations'):
+                    vals = set([v.lower() for v in filters['locations']])
+                    target_df = target_df[target_df['City'].str.lower().isin(vals)]
                 if filters.get('managers'):
-                    manager_mask = pd.Series([False] * len(target_df), index=target_df.index)
-                    for manager in filters['managers']:
-                        manager_mask |= target_df['ManagerLine'].str.contains(f'\\b{manager}\\b', regex=True, na=False)
-                    target_df = target_df[manager_mask]
-                utilized_emails = utilized_emails.intersection(set(target_df['UserPrincipalName']))
+                    target_df['ManagerLine_lc'] = target_df['ManagerLine'].str.lower().fillna('')
+                    managers_lc = [m.strip().lower() for m in filters['managers']]
+                    target_df = target_df[target_df['ManagerLine_lc'].apply(lambda s: any(m in s for m in managers_lc))]
+                utilized_emails = utilized_emails.intersection(set(target_df['UserPrincipalName'].str.lower()))
             if not utilized_emails: return {'error': "No matching users found to analyze."}
             self.update_status("2. Calculating user metrics...")
             matched_users_df = usage_df[usage_df['User Principal Name'].isin(utilized_emails)].copy()
