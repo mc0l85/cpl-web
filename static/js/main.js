@@ -42,9 +42,11 @@ document.addEventListener("DOMContentLoaded", function() {
         chart.render();
         return chart;
     }
-    const topUtilizersChart = createRadialChart("#top-utilizers-chart", "Top Utilizers", "#00bc8c");
-    const underUtilizedChart = createRadialChart("#under-utilized-chart", "Under-Utilized", "#f0ad4e");
-    const reallocateChart = createRadialChart("#reallocate-chart", "Re-Allocate", "#d9534f");
+    const powerUserChart = createRadialChart("#power-user-chart", "Power Users", "#00bc8c");
+    const consistentUserChart = createRadialChart("#consistent-user-chart", "Consistent Users", "#0d6efd");
+    const coachingChart = createRadialChart("#coaching-opportunity-chart", "Coaching", "#f0ad4e");
+    const newUserChart = createRadialChart("#new-user-chart", "New Users", "#6f42c1");
+    const recaptureChart = createRadialChart("#recapture-chart", "Recapture", "#d9534f");
 
     // File Handling
     const handleFileUpload = (file, type, statusElement) => {
@@ -117,16 +119,18 @@ document.addEventListener("DOMContentLoaded", function() {
         runAnalysisBtn.disabled = false;
         runAnalysisBtn.innerHTML = 'Run Analysis';
         statusLabel.textContent = 'Analysis complete.';
-        const { total, top, under, reallocate } = data.dashboard;
+        const { total, categories } = data.dashboard;
         document.getElementById('total-users').textContent = total;
         const updateChart = (chart, count, total) => {
             const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
             chart.updateSeries([percentage]);
             chart.updateOptions({ plotOptions: { radialBar: { dataLabels: { value: { formatter: () => count } } } } });
         };
-        updateChart(topUtilizersChart, top, total);
-        updateChart(underUtilizedChart, under, total);
-        updateChart(reallocateChart, reallocate, total);
+        updateChart(powerUserChart, categories.power_user || 0, total);
+        updateChart(consistentUserChart, categories.consistent_user || 0, total);
+        updateChart(coachingChart, categories.coaching || 0, total);
+        updateChart(newUserChart, categories.new_user || 0, total);
+        updateChart(recaptureChart, categories.recapture || 0, total);
         
         reportDataForDownload = data.reports;
         reportDataForDownload.excel_bytes = undefined;

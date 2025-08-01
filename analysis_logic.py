@@ -5,9 +5,12 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 import io
+import os
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import PatternFill, Font, Alignment
 from openpyxl.formatting.rule import ColorScaleRule, DataBarRule
+from datetime import datetime
+import config
 
 class AnalysisRunner:
     def __init__(self, socketio, sid):
@@ -20,22 +23,34 @@ class AnalysisRunner:
         self.socketio.emit('status_update', {'message': message}, to=self.sid)
         self.socketio.sleep(0.1)
 
-    def _get_justification(self, row, total_months, grace_period_check_date, sixty_days_ago, ninety_days_ago):
-        if row['Classification'] == 'Top Utilizer':
-            return "High Engagement"
-        reasons = []
-        is_new_user = pd.notna(row['First Appearance']) and row['First Appearance'] > grace_period_check_date
-        if is_new_user: reasons.append("New user (in 90-day grace period)")
-        if row.get('is_reactivated', False): reasons.append("Reactivation Possible")
-        if row['Usage Complexity'] == 0 and not is_new_user: reasons.append("No tool usage recorded")
-        elif pd.notna(row['Overall Recency']) and row['Overall Recency'] < ninety_days_ago: reasons.append("No activity in 90+ days")
-        elif pd.notna(row['Overall Recency']) and (ninety_days_ago <= row['Overall Recency'] < sixty_days_ago): reasons.append("No activity in 60-89 days")
-        if row['Usage Trend'] == 'Decreasing': reasons.append("Downward usage trend")
-        active_months = int(row['Usage Consistency (%)'] * total_months / 100) if total_months > 0 else 0
-        if row['Appearances'] == 1 and not is_new_user: reasons.append("Single report appearance")
-        elif row['Usage Consistency (%)'] < 50 and not is_new_user: reasons.append(f"Low consistency (active in {active_months} of {total_months} months)")
-        return "; ".join(reasons) if reasons else "High Engagement"
+    def detect_adoption_date(self, user_history_df, tool_cols):
+        user_history_df = user_history_df.sort_values(by='Report Refresh Date')
+        user_history_df['tools_used'] = user_history_df[tool_cols].notna().sum(axis=1)
+        if user_history_df.empty:
+            return pd.NaT
+        if user_history_df['tools_used'].iloc[0] >= 4:
+            return user_history_df['Report Refresh Date'].iloc[0]
+        prev_tools = user_history_df['tools_used'].shift(1).fillna(0)
+        burst_mask = (prev_tools <= 2) & (user_history_df['tools_used'] >= 4)
+        if burst_mask.any():
+            return user_history_df.loc[burst_mask, 'Report Refresh Date'].iloc[0]
+        return user_history_df['Report Refresh Date'].iloc[0]
 
+    def get_manager_classification(self, row):
+        today = datetime.strptime('2025-07-31', '%Y-%m-%d')
+        last_seen = pd.to_datetime(row['Overall Recency']) if pd.notna(row['Overall Recency']) else pd.NaT
+        first_seen = pd.to_datetime(row.get('Adoption Date')) if pd.notna(row.get('Adoption Date')) else (pd.to_datetime(row['First Appearance']) if pd.notna(row['First Appearance']) else pd.NaT)
+        if pd.notna(first_seen) and (today - first_seen).days < 90:
+            return "New User"
+        if pd.notna(last_seen) and (today - last_seen).days > 90:
+            return "License Recapture"
+        if row['Usage Consistency (%)'] > 75 and row['Usage Complexity'] > 10:
+            return "Power User"
+        if row['Usage Consistency (%)'] > 75:
+            return "Consistent User"
+        if row['Usage Consistency (%)'] > 25:
+            return "Coaching Opportunity"
+        return "License Recapture"
     def execute_analysis(self, usage_file_paths, target_user_path, filters):
         try:
             self.update_status("1. Loading usage reports from server...")
@@ -85,10 +100,16 @@ class AnalysisRunner:
             min_report_date, max_report_date = usage_df['Report Refresh Date'].min(), usage_df['Report Refresh Date'].max()
             total_months_in_period = (max_report_date.year - min_report_date.year) * 12 + max_report_date.month - min_report_date.month + 1
             user_metrics = []
+            total_users = len(utilized_emails)
+            processed = 0
             for email in utilized_emails:
+                processed += 1
+                if processed % 50 == 0 or processed == total_users:
+                    self.update_status(f"2b. Processing users: {processed} of {total_users}...")
                 user_data = matched_users_df[matched_users_df['User Principal Name'] == email]
                 user_data_sorted = user_data.sort_values(by='Report Refresh Date')
                 user_data_sorted['Row Recency'] = user_data_sorted[copilot_tool_cols].max(axis=1)
+                adoption_date = self.detect_adoption_date(user_data_sorted.copy(), copilot_tool_cols)
                 is_reactivated = False
                 recency_series = user_data_sorted['Row Recency'].dropna()
                 if len(recency_series) >= 3:
@@ -102,6 +123,8 @@ class AnalysisRunner:
                     if len(report_dates) > 0: first_activity = pd.to_datetime(report_dates).min()
                 else:
                     first_activity, last_activity = activity_dates.min(), activity_dates.max()
+                    if pd.notna(adoption_date):
+                        first_activity = adoption_date
                     active_months = len(pd.to_datetime(activity_dates).to_period('M').unique())
                     complexity = user_data[copilot_tool_cols].notna().any().sum()
                     monthly_activity = user_data[copilot_tool_cols].stack().dropna().reset_index().rename(columns={'level_1': 'Tool', 0: 'Date'})
@@ -116,7 +139,7 @@ class AnalysisRunner:
                             if second_half_activity['Tool'].nunique() > first_half_activity['Tool'].nunique(): trend = "Increasing"
                             elif second_half_activity['Tool'].nunique() < first_half_activity['Tool'].nunique(): trend = "Decreasing"
                 consistency = (active_months / total_months_in_period) * 100 if total_months_in_period > 0 else 0
-                user_metrics.append({'Email': email, 'Usage Consistency (%)': consistency, 'Overall Recency': last_activity, 'Usage Complexity': complexity, 'Avg Tools / Report': avg_tools_per_month, 'Usage Trend': trend, 'Appearances': user_data['Report Refresh Date'].nunique(), 'First Appearance': first_activity, 'is_reactivated': is_reactivated})
+                user_metrics.append({'Email': email, 'Usage Consistency (%)': consistency, 'Overall Recency': last_activity, 'Usage Complexity': complexity, 'Avg Tools / Report': avg_tools_per_month, 'Usage Trend': trend, 'Appearances': user_data['Report Refresh Date'].nunique(), 'First Appearance': first_activity, 'Adoption Date': adoption_date, 'is_reactivated': is_reactivated})
             self.utilized_metrics_df = pd.DataFrame(user_metrics)
             if self.utilized_metrics_df.empty: return {'error': "No data available for the selected users."}
             max_consistency, max_complexity, max_avg_complexity = self.utilized_metrics_df['Usage Consistency (%)'].max(), self.utilized_metrics_df['Usage Complexity'].max(), self.utilized_metrics_df['Avg Tools / Report'].max()
@@ -124,36 +147,64 @@ class AnalysisRunner:
             self.utilized_metrics_df['complexity_norm'] = self.utilized_metrics_df['Usage Complexity'] / max_complexity if max_complexity > 0 else 0
             self.utilized_metrics_df['avg_complexity_norm'] = self.utilized_metrics_df['Avg Tools / Report'] / max_avg_complexity if max_avg_complexity > 0 else 0
             self.utilized_metrics_df['Engagement Score'] = self.utilized_metrics_df['consistency_norm'] + self.utilized_metrics_df['complexity_norm'] + self.utilized_metrics_df['avg_complexity_norm']
-            self.utilized_metrics_df = self.utilized_metrics_df.sort_values(by=["Engagement Score", "Usage Complexity"], ascending=[False, False]).reset_index(drop=True)
+            self.utilized_metrics_df = self.utilized_metrics_df.sort_values(by=["Engagement Score", "Usage Complexity", "Usage Consistency (%)", "Overall Recency", "Email"], ascending=[False, False, False, False, True]).reset_index(drop=True)
             self.utilized_metrics_df['Global Rank'] = self.utilized_metrics_df.index + 1
             self.update_status("3. Classifying users...")
-            reference_date = usage_df['Report Refresh Date'].max()
-            grace_period_check_date, sixty_days_ago, ninety_days_ago = reference_date - timedelta(days=90), reference_date - timedelta(days=60), reference_date - timedelta(days=90)
-            self.utilized_metrics_df['Classification'] = 'Top Utilizer'
-            for index, row in self.utilized_metrics_df.iterrows():
-                is_new_user = pd.notna(row['First Appearance']) and row['First Appearance'] > grace_period_check_date
-                if is_new_user:
-                    self.utilized_metrics_df.loc[index, 'Classification'] = 'Under-Utilized'
-                    continue
-
-                if (row['Usage Complexity'] == 0) or \
-                   (pd.notna(row['Overall Recency']) and row['Overall Recency'] < ninety_days_ago) or \
-                   ((row['Usage Consistency (%)'] < 25) and not is_new_user):
-                    self.utilized_metrics_df.loc[index, 'Classification'] = 'For Reallocation'
-
-                elif (pd.notna(row['Overall Recency']) and (ninety_days_ago <= row['Overall Recency'] < sixty_days_ago)) or \
-                     (row['Usage Trend'] == 'Decreasing') or \
-                     (row['Appearances'] == 1 and not is_new_user) or \
-                     (row.get('is_reactivated', False)) or \
-                     ((row['Usage Consistency (%)'] < 50) and not is_new_user):
-                    self.utilized_metrics_df.loc[index, 'Classification'] = 'Under-Utilized'
-            self.utilized_metrics_df['Justification'] = self.utilized_metrics_df.apply(self._get_justification, axis=1, total_months=total_months_in_period, grace_period_check_date=grace_period_check_date, sixty_days_ago=sixty_days_ago, ninety_days_ago=ninety_days_ago)
+            self.utilized_metrics_df['Classification'] = self.utilized_metrics_df.apply(self.get_manager_classification, axis=1)
+            self.utilized_metrics_df['Justification'] = self.utilized_metrics_df['Classification']
             reallocation_df, under_utilized_df, top_utilizers_df = self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'For Reallocation'], self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'Under-Utilized'], self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'Top Utilizer']
             self.update_status("4. Generating reports in memory...")
-            excel_bytes = self.create_excel_report(top_utilizers_df, under_utilized_df, reallocation_df)
+            excel_bytes = self.create_excel_report(top_utilizers_df, under_utilized_df, reallocation_df, self.utilized_metrics_df)
             leaderboard_html = self.create_leaderboard_html(self.utilized_metrics_df)
+            debug_files = {}
+            try:
+                debug_root = None
+                if config.GENERATE_DEBUG_FILES:
+                    debug_root = os.path.join('temp_uploads', 'debug')
+                    os.makedirs(debug_root, exist_ok=True)
+                    class_csv = os.path.join(debug_root, 'classification_details.csv')
+                    self.utilized_metrics_df.to_csv(class_csv, index=False)
+                    deep_txt = os.path.join(debug_root, 'deep_dive_dump.txt')
+                    with open(deep_txt, 'w', encoding='utf-8') as f:
+                        tool_cols = [col for col in self.full_usage_data.columns if 'Last activity date of' in col]
+                        for _, r in self.utilized_metrics_df.iterrows():
+                            email = r['Email']
+                            f.write(f"{email}\n")
+                            f.write(f"Classification: {r['Classification']}\n")
+                            f.write(f"Justification: {r['Justification']}\n")
+                            f.write(f"Usage Consistency: {r['Usage Consistency (%)']:.1f}%\n")
+                            f.write(f"Usage Complexity: {int(r['Usage Complexity'])}\n")
+                            f.write(f"Engagement Score: {r['Engagement Score']:.2f}\n")
+                            f.write(f"Usage Trend: {r['Usage Trend']}\n")
+                            adoption = r['Adoption Date'].strftime('%Y-%m-%d') if ('Adoption Date' in r and pd.notna(r['Adoption Date'])) else 'N/A'
+                            first_seen = r['First Appearance'].strftime('%Y-%m-%d') if pd.notna(r['First Appearance']) else 'N/A'
+                            last_seen = r['Overall Recency'].strftime('%Y-%m-%d') if pd.notna(r['Overall Recency']) else 'N/A'
+                            f.write(f"Adoption Date: {adoption}\n")
+                            f.write(f"First Seen: {first_seen}\n")
+                            f.write(f"Last Seen: {last_seen}\n")
+                            user_data = self.full_usage_data[self.full_usage_data['User Principal Name'] == email].copy()
+                            if not user_data.empty:
+                                f.write("Records:\n")
+                                for _, row in user_data.sort_values(by='Report Refresh Date', ascending=False).iterrows():
+                                    f.write(f"  Report Date: {row['Report Refresh Date'].strftime('%Y-%m-%d')}\n")
+                                    tools_used_in_report = [f"    - {col.replace('Last activity date of ', '').replace(' (UTC)', '')}: {row[col].strftime('%Y-%m-%d')}" for col in tool_cols if pd.notna(row[col])]
+                                    if tools_used_in_report:
+                                        f.write("\n".join(tools_used_in_report) + "\n")
+                                    else:
+                                        f.write("    - No specific tool activity recorded for this date.\n")
+                            f.write("\n")
+                debug_files = {'path': debug_root} if debug_root else {}
+            except Exception as _:
+                pass
             self.update_status("Success! Reports are ready for download.")
-            return { 'status': 'success', 'dashboard': { 'total': len(self.utilized_metrics_df), 'top': len(top_utilizers_df), 'under': len(under_utilized_df), 'reallocate': len(reallocation_df) }, 'reports': { 'excel_bytes': excel_bytes, 'html_string': leaderboard_html }, 'deep_dive_data': { 'full_usage_data': self.full_usage_data, 'utilized_metrics_df': self.utilized_metrics_df } }
+            cat_counts = {
+                'power_user': int((self.utilized_metrics_df['Classification'].str.startswith('Power User')).sum()),
+                'consistent_user': int((self.utilized_metrics_df['Classification'].str.startswith('Consistent User')).sum()),
+                'coaching': int((self.utilized_metrics_df['Classification'].str.startswith('Coaching Opportunity')).sum()),
+                'new_user': int((self.utilized_metrics_df['Classification'].str.startswith('New User')).sum()),
+                'recapture': int((self.utilized_metrics_df['Classification'].str.startswith('License Recapture')).sum()),
+            }
+            return { 'status': 'success', 'dashboard': { 'total': len(self.utilized_metrics_df), 'categories': cat_counts }, 'reports': { 'excel_bytes': excel_bytes, 'html_string': leaderboard_html }, 'deep_dive_data': { 'full_usage_data': self.full_usage_data, 'utilized_metrics_df': self.utilized_metrics_df, 'debug': debug_files } }
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -186,37 +237,100 @@ class AnalysisRunner:
             cell_range = f"{col_letter}2:{col_letter}{len(df)+1}"
             worksheet.conditional_formatting.add(cell_range, DataBarRule(start_type='min', end_type='max', color=green))
 
-    def create_excel_report(self, top_df, under_df, realloc_df):
+    def create_excel_report(self, top_df, under_df, realloc_df, all_df=None):
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             cols = ['Global Rank', 'Email', 'Classification', 'Usage Consistency (%)', 'Overall Recency', 'Usage Complexity', 'Avg Tools / Report', 'Usage Trend', 'Engagement Score', 'Justification']
             sheets = {
-                'Leaderboard': pd.concat([top_df, under_df, realloc_df]).sort_values(by="Global Rank"),
-                'Top Utilizers': top_df.sort_values(by="Global Rank"),
-                'Under-Utilized': under_df.sort_values(by="Global Rank"),
-                'For Reallocation': realloc_df.sort_values(by="Engagement Score", ascending=True)
+                'Leaderboard': pd.concat([top_df, under_df, realloc_df]).sort_values(by="Global Rank") if not (top_df.empty and under_df.empty and realloc_df.empty) else (all_df.sort_values(by="Global Rank") if all_df is not None else pd.DataFrame()),
             }
+            if all_df is not None and not all_df.empty:
+                cat_map = {
+                    'Power User': 'Power User',
+                    'Consistent User': 'Consistent User',
+                    'Coaching Opportunity': 'Coaching Opportunity',
+                    'New User': 'New User',
+                    'License Recapture': 'License Recapture'
+                }
+                for cat in cat_map.keys():
+                    subset = all_df[all_df['Classification'].str.startswith(cat)]
+                    sheets[cat_map[cat]] = subset.sort_values(by="Global Rank")
+            wrote_any = False
             for sheet_name, df in sheets.items():
-                if not df.empty:
-                    df_to_write = df[cols].copy()
-                    df_to_write.to_excel(writer, sheet_name=sheet_name, index=False, float_format="%.2f")
-                    self.style_excel_sheet(writer.sheets[sheet_name], df_to_write)
+                df_local = df.copy()
+                for c in cols:
+                    if c not in df_local.columns:
+                        df_local[c] = pd.Series([np.nan]*len(df_local))
+                df_to_write = df_local[cols] if not df_local.empty else pd.DataFrame(columns=cols)
+                df_to_write.to_excel(writer, sheet_name=sheet_name, index=False, float_format="%.2f")
+                self.style_excel_sheet(writer.sheets[sheet_name], df_to_write)
+                wrote_any = wrote_any or not df_to_write.empty
+            writer.book.active = 0
+        if not wrote_any:
+            return None
+        output.seek(0)
         return output.getvalue()
 
     def create_leaderboard_html(self, all_users_df):
         if all_users_df is None or all_users_df.empty: return ""
-        order = ['Top Utilizer', 'Under-Utilized', 'For Reallocation']
-        parts = []
-        for cls in order:
-            part = all_users_df[all_users_df['Classification'] == cls].sort_values(by="Global Rank")
-            if not part.empty:
-                parts.append(part)
-        leaderboard_data = pd.concat(parts, ignore_index=True) if parts else all_users_df.sort_values(by="Global Rank")
-        html_head = r"<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Leaderboard</title></head><body><div>"
+        leaderboard_data = all_users_df.sort_values(by="Global Rank")
+        
+        html_head = r'''
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Leaderboard - Haleon Theme</title>
+            <script src="https://cdn.tailwindcss.com"></script>
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+            <style>
+                body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+                .leaderboard-component { border-radius: 1rem; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); overflow: hidden; border: 1px solid #e5e7eb; }
+                .title-banner { background-color: #000000; }
+                .table-container { background-color: #FFFFFF; }
+                .table-header { background-color: #2d3748; }
+                .table-row:nth-child(even) { background-color: #f9fafb; }
+                .table-row:hover { background-color: #f0f0f0; }
+                .rank-badge { font-weight: 700; width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; border-radius: 50%; color: #000; }
+                .progress-bar-container { background-color: #e5e7eb; border-radius: 9999px; height: 8px; width: 100%; }
+                .progress-bar { background: #39FF14; border-radius: 9999px; height: 100%; }
+                .trend-icon.Increasing { color: #16a34a; }
+                .trend-icon.Stable { color: #f59e0b; }
+                .trend-icon.Decreasing { color: #ef4444; }
+                .trend-icon.N\/A { color: #6b7280; }
+                .neon-green-text { color: #16a34a; }
+                .user-email { font-weight: 600; color: #000000; }
+            </style>
+        </head>
+        <body class="p-4 sm:p-6 lg:p-8">
+            <div class="leaderboard-component w-full max-w-5xl mx-auto">
+                <div class="title-banner p-6 text-center">
+                    <h1 class="text-4xl font-bold text-white mb-2">Copilot Usage Leaderboard</h1>
+                    <p class="text-gray-300">Ranking by Engagement Score</p>
+                </div>
+                <div class="table-container">
+                    <div class="overflow-x-auto">
+                        <div class="min-w-full inline-block align-middle">
+                            <div class="table-header">
+                                <div class="grid grid-cols-12 gap-4 px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-white">
+                                    <div class="col-span-1">Rank</div>
+                                    <div class="col-span-5">User</div>
+                                    <div class="col-span-2 text-center">Consistency</div>
+                                    <div class="col-span-2 text-center">Trend</div>
+                                    <div class="col-span-2 text-right">Engagement</div>
+                                </div>
+                            </div>
+                            <div class="divide-y divide-gray-200">
+        '''
+        
         html_rows = ""
         max_score = leaderboard_data['Engagement Score'].max() if not leaderboard_data.empty else 3.0
+        
         for _, user_row in leaderboard_data.iterrows():
             if pd.isna(user_row['Email']): continue
+            
             rank = int(user_row['Global Rank'])
             score_percentage = (user_row['Engagement Score'] / max_score) * 100 if max_score > 0 else 0
             hue = score_percentage * 1.2
@@ -224,12 +338,28 @@ class AnalysisRunner:
             trend = user_row['Usage Trend']
             trend_icon_map = {'Increasing': 'fa-arrow-trend-up', 'Decreasing': 'fa-arrow-trend-down', 'Stable': 'fa-minus', 'N/A': 'fa-question'}
             trend_icon = f"fa-solid {trend_icon_map.get(trend, 'fa-minus')}"
-            html_rows += ("<div class=\"grid grid-cols-12 gap-4 px-6 py-3 items-center table-row text-gray-800\">"
-                           f"<div class=\"col-span-1\"><div class=\"rank-badge\" style=\"background-color: {badge_color};\"><span>{rank}</span></div></div>"
-                           f"<div class=\"col-span-5\"><div class=\"user-email\">{user_row['Email']}</div></div>"
-                           f"<div class=\"col-span-2 text-center\"><div class=\"text-sm font-semibold neon-green-text\">{user_row['Usage Consistency (%)']:.1f}%</div>"
-                           f"<div class=\"progress-bar-container mt-1\"><div class=\"progress-bar\" style=\"width: {user_row['Usage Consistency (%)']}%\"></div></div></div>"
-                           f"<div class=\"col-span-2 text-center\"><i class=\"trend-icon {trend} {trend_icon} fa-lg\"></i></div>"
-                           f"<div class=\"col-span-2 text-right\"><div class=\"text-sm font-bold neon-green-text\">{user_row['Engagement Score']:.2f}</div></div></div>")
-        html_foot = """</div></div></div></div></div></body></html>"""
+            
+            html_rows += f'''
+            <div class="grid grid-cols-12 gap-4 px-6 py-3 items-center table-row text-gray-800">
+                <div class="col-span-1"><div class="rank-badge" style="background-color: {badge_color};"><span>{rank}</span></div></div>
+                <div class="col-span-5"><div class="user-email">{user_row['Email']}</div></div>
+                <div class="col-span-2 text-center">
+                    <div class="text-sm font-semibold neon-green-text">{user_row['Usage Consistency (%)']:.1f}%</div>
+                    <div class="progress-bar-container mt-1"><div class="progress-bar" style="width: {user_row['Usage Consistency (%)']}%"></div></div>
+                </div>
+                <div class="col-span-2 text-center"><i class="trend-icon {trend} {trend_icon} fa-lg"></i></div>
+                <div class="col-span-2 text-right"><div class="text-sm font-bold neon-green-text">{user_row['Engagement Score']:.2f}</div></div>
+            </div>
+            '''
+        
+        html_foot = r'''
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+        '''
+        
         return html_head + html_rows + html_foot

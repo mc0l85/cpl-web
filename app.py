@@ -141,7 +141,15 @@ def run_analysis_and_emit(runner, usage_file_paths, target_file_path, filters, s
         deep_dive_path = os.path.join(session_folder, 'deep_dive_data.pkl')
         pd.to_pickle(deep_dive_data, deep_dive_path)
         
-        excel_b64 = base64.b64encode(results['reports']['excel_bytes']).decode('ascii')
+        excel_bytes = results['reports']['excel_bytes']
+        if excel_bytes is None:
+            excel_b64 = ''
+        else:
+            try:
+                print(f"Excel bytes length: {len(excel_bytes)}")
+            except Exception:
+                print("Excel bytes length: <unavailable>")
+            excel_b64 = base64.b64encode(excel_bytes).decode('ascii') if isinstance(excel_bytes, (bytes, bytearray)) else ''
         html_b64 = base64.b64encode(results['reports']['html_string'].encode('utf-8')).decode('ascii')
         payload = { 'dashboard': results['dashboard'], 'reports': { 'excel_b64': excel_b64, 'html_b64': html_b64 } }
         socketio.emit('analysis_complete', payload, to=sid)
@@ -175,7 +183,7 @@ def handle_deep_dive(data):
         return
 
     metrics = user_metrics.iloc[0]
-    text_result = f"--- Summary for {user_email} ---\nClassification: {metrics['Classification']}\nJustification: {metrics['Justification']}\n\nGlobal Rank: {int(metrics['Global Rank'])}\nUsage Consistency: {metrics['Usage Consistency (%)']:.1f}%\nFirst Seen: {metrics['First Appearance'].strftime('%Y-%m-%d') if pd.notna(metrics['First Appearance']) else 'N/A'}\nLast Seen: {metrics['Overall Recency'].strftime('%Y-%m-%d') if pd.notna(metrics['Overall Recency']) else 'N/A'}\nUsage Complexity (Total Tools): {int(metrics['Usage Complexity'])}\nEngagement Score: {metrics['Engagement Score']:.2f}\nUsage Trend: {metrics['Usage Trend']}\n\n"
+    text_result = f"--- Summary for {user_email} ---\nClassification: {metrics['Classification']}\nJustification: {metrics['Justification']}\n\nGlobal Rank: {int(metrics['Global Rank'])}\nUsage Consistency: {metrics['Usage Consistency (%)']:.1f}%\nAdoption Date: {metrics['Adoption Date'].strftime('%Y-%m-%d') if pd.notna(metrics.get('Adoption Date')) else 'N/A'}\nFirst Seen: {metrics['First Appearance'].strftime('%Y-%m-%d') if pd.notna(metrics['First Appearance']) else 'N/A'}\nLast Seen: {metrics['Overall Recency'].strftime('%Y-%m-%d') if pd.notna(metrics['Overall Recency']) else 'N/A'}\nUsage Complexity (Total Tools): {int(metrics['Usage Complexity'])}\nEngagement Score: {metrics['Engagement Score']:.2f}\nUsage Trend: {metrics['Usage Trend']}\n\n"
     tool_cols = [col for col in full_usage_data.columns if 'Last activity date of' in col]
     if metrics['Usage Complexity'] > 0:
         text_result += f"--- Detailed Records ---\n"
