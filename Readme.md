@@ -13,7 +13,7 @@ A sleek, real-time web application for analyzing Microsoft Copilot usage reports
 * **In-Memory Processing**: No files are stored on the server, ensuring privacy and efficiency.
 * **Real-Time Updates**: See the status of your analysis live, powered by WebSockets.
 * **Dynamic Filtering**: Interactively filter user data by company, department, location, or manager.
-* **Automated User Classification**: Users are automatically categorized as **Top Utilizers**, **Under-Utilized**, or recommended **For Reallocation**.
+* **Automated User Classification**: Users are automatically categorized into five groups: **Power User**, **Consistent User**, **Coaching Opportunity**, **New User**, and **License Recapture**.
 * **Direct Downloads**: Download the comprehensive Excel report and interactive HTML leaderboard directly from your browser.
 * **User Deep Dive**: Search for a specific user to see detailed stats and a usage trend chart.
 
