@@ -224,6 +224,12 @@ class AnalysisRunner:
             trend = user_row['Usage Trend']
             trend_icon_map = {'Increasing': 'fa-arrow-trend-up', 'Decreasing': 'fa-arrow-trend-down', 'Stable': 'fa-minus', 'N/A': 'fa-question'}
             trend_icon = f"fa-solid {trend_icon_map.get(trend, 'fa-minus')}"
-            html_rows += f"""<div class=\"grid grid-cols-12 gap-4 px-6 py-3 items-center table-row text-gray-800\"><div class=\"col-span-1\"><div class=\"rank-badge\" style=\"background-color: {badge_color};\"><span>{rank}</span></div></div><div class=\"col-span-5\"><div class=\"user-email\">{user_row['Email']}</div></div><div class=\"col-span-2 text-center\"><div class=\"text-sm font-semibold neon-green-text\">{user_row['Usage Consistency (%)']:.1f}\%</div><div class=\"progress-bar-container mt-1\"><div class=\"progress-bar\" style=\"width: {user_row['Usage Consistency (%)']}\%\"></div></div></div><div class=\"col-span-2 text-center\"><i class=\"trend-icon {trend} {trend_icon} fa-lg\"></i></div><div class=\"col-span-2 text-right\"><div class=\"text-sm font-bold neon-green-text\">{user_row['Engagement Score']:.2f}</div></div></div>"""
+            html_rows += ("<div class=\"grid grid-cols-12 gap-4 px-6 py-3 items-center table-row text-gray-800\">"
+                           f"<div class=\"col-span-1\"><div class=\"rank-badge\" style=\"background-color: {badge_color};\"><span>{rank}</span></div></div>"
+                           f"<div class=\"col-span-5\"><div class=\"user-email\">{user_row['Email']}</div></div>"
+                           f"<div class=\"col-span-2 text-center\"><div class=\"text-sm font-semibold neon-green-text\">{user_row['Usage Consistency (%)']:.1f}%</div>"
+                           f"<div class=\"progress-bar-container mt-1\"><div class=\"progress-bar\" style=\"width: {user_row['Usage Consistency (%)']}%\"></div></div></div>"
+                           f"<div class=\"col-span-2 text-center\"><i class=\"trend-icon {trend} {trend_icon} fa-lg\"></i></div>"
+                           f"<div class=\"col-span-2 text-right\"><div class=\"text-sm font-bold neon-green-text\">{user_row['Engagement Score']:.2f}</div></div></div>")
         html_foot = """</div></div></div></div></div></body></html>"""
         return html_head + html_rows + html_foot
