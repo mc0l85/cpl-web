@@ -537,58 +537,65 @@ class AnalysisRunner:
             # Add Usage_Trend sheet at the end
             if usage_complexity_trend_df is not None and not usage_complexity_trend_df.empty:
                 sheet_name = "Usage_Trend"
-                usage_complexity_trend_df.to_excel(writer, sheet_name=sheet_name, index=False)
+                
+                # Create a clean version of the data for Excel
+                clean_trend_df = usage_complexity_trend_df.copy()
+                clean_trend_df = clean_trend_df.dropna()  # Remove any None values
+                
+                # Write the data to Excel
+                clean_trend_df.to_excel(writer, sheet_name=sheet_name, index=False)
                 trend_ws = writer.sheets[sheet_name]
 
-                # Create a Line Chart
-                chart = LineChart()
-                chart.title = "Usage Complexity Over Time"
-                chart.style = 10  # A predefined chart style
-                chart.x_axis.title = "Report Refresh Period"
-                chart.y_axis.title = "Average Tools Used"
+                try:
+                    # Create a simple, reliable Line Chart
+                    chart = LineChart()
+                    chart.title = "Usage Complexity Over Time"
+                    chart.style = 2  # Simpler style
+                    chart.x_axis.title = "Period"
+                    chart.y_axis.title = "Average Tools Used"
 
-                # Set x-axis to be date axis
-                chart.x_axis = DateAxis(crossAx=100)
-                chart.x_axis.numberFormat = 'yyyy-mm'
-                chart.x_axis.majorUnit = 1  # Display every month
-                chart.x_axis.clean = True
-                chart.x_axis.scaling.orientation = "minMax"
+                    # Get data range - only include actual data rows
+                    num_data_rows = len(clean_trend_df)
+                    if num_data_rows > 0:
+                        # Data columns: B (Global) and C (Target), starting from row 2
+                        data = Reference(trend_ws, min_col=2, min_row=1, max_col=3, max_row=num_data_rows + 1)
+                        # Categories: Column D (Report Refresh Period), starting from row 2
+                        categories = Reference(trend_ws, min_col=4, min_row=2, max_row=num_data_rows + 1)
+                        
+                        chart.add_data(data, titles_from_data=True)
+                        chart.set_categories(categories)
+                        
+                        # Style the lines
+                        if len(chart.series) >= 2:
+                            s1 = chart.series[0]  # Global Usage Complexity
+                            s1.graphicalProperties.line.solidFill = "FF0000"  # Red
+                            s1.graphicalProperties.line.width = 25000  # 2.5pt
+                            
+                            s2 = chart.series[1]  # Target Usage Complexity
+                            s2.graphicalProperties.line.solidFill = "00B0F0"  # Blue
+                            s2.graphicalProperties.line.width = 25000  # 2.5pt
 
-                # Data for the chart
-                data = Reference(trend_ws, min_col=2, min_row=1, max_col=trend_ws.max_column, max_row=trend_ws.max_row)
-                categories = Reference(trend_ws, min_col=1, min_row=2, max_row=trend_ws.max_row)
-                
-                chart.add_data(data, titles_from_data=True)
-                chart.set_categories(categories)
-                
-                # Style the lines
-                s1 = chart.series[0] # Global Usage Complexity
-                s1.graphicalProperties.line.solidFill = "FF0000" # Red
-                s1.graphicalProperties.line.width = 30000 # 3pt
-                s1.dLbls = DataLabelList() # No labels
+                        # Add the chart to the sheet
+                        trend_ws.add_chart(chart, "A10")  # Position the chart
+                        
+                        # Auto-fit columns
+                        for column in trend_ws.columns:
+                            max_length = 0
+                            column_letter = column[0].column_letter if column else 'A'
+                            for cell in column:
+                                try:
+                                    if cell.value and len(str(cell.value)) > max_length:
+                                        max_length = len(str(cell.value))
+                                except:
+                                    pass
+                            adjusted_width = max(10, max_length + 2)
+                            trend_ws.column_dimensions[column_letter].width = adjusted_width
 
-                s2 = chart.series[1] # Target Usage Complexity
-                s2.graphicalProperties.line.solidFill = "00B0F0" # Blue
-                s2.graphicalProperties.line.width = 30000 # 3pt
-                s2.dLbls = DataLabelList() # No labels
-
-                # Add the chart to the sheet
-                trend_ws.add_chart(chart, "A10") # Position the chart
-                
-                # Auto-fit columns for the trend sheet
-                for column in trend_ws.columns:
-                    max_length = 0
-                    column = [cell for cell in column]
-                    for cell in column:
-                        try:
-                            if len(str(cell.value)) > max_length:
-                                max_length = len(str(cell.value))
-                        except:
-                            pass
-                    adjusted_width = (max_length + 2)
-                    trend_ws.column_dimensions[column[0].column_letter].width = adjusted_width
-
-                wrote_any = True # Indicate that at least one sheet was written
+                        wrote_any = True
+                except Exception as chart_error:
+                    print(f"Chart creation error: {chart_error}")
+                    # If chart fails, still mark as wrote_any since data was written
+                    wrote_any = True
             
             writer.book.active = 0
         if not wrote_any:
