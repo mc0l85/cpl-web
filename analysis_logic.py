@@ -18,6 +18,9 @@ from openpyxl.drawing.colors import ColorChoice # Import ColorChoice
 from openpyxl.styles.colors import Color
 from datetime import datetime
 import config
+
+
+class CopilotAnalyzer:
     def __init__(self, socketio, sid):
         self.socketio = socketio
         self.sid = sid
@@ -25,42 +28,42 @@ import config
         self.utilized_metrics_df = None
 
     def update_status(self, message):
-        self.socketio.emit('status_update', {'message': message}, to=self.sid)
-        self.socketio.sleep(0.1)
+    self.socketio.emit('status_update', {'message': message}, to=self.sid)
+    self.socketio.sleep(0.1)
 
     def detect_adoption_date(self, user_history_df, tool_cols):
-        user_history_df = user_history_df.sort_values(by='Report Refresh Date')
-        user_history_df['tools_used'] = user_history_df[tool_cols].notna().sum(axis=1)
-        if user_history_df.empty:
-            return pd.NaT
-        if user_history_df['tools_used'].iloc[0] >= 4:
-            return user_history_df['Report Refresh Date'].iloc[0]
-        prev_tools = user_history_df['tools_used'].shift(1).fillna(0)
-        burst_mask = (prev_tools <= 2) & (user_history_df['tools_used'] >= 4)
-        if burst_mask.any():
-            return user_history_df.loc[burst_mask, 'Report Refresh Date'].iloc[0]
+    user_history_df = user_history_df.sort_values(by='Report Refresh Date')
+    user_history_df['tools_used'] = user_history_df[tool_cols].notna().sum(axis=1)
+    if user_history_df.empty:
+        return pd.NaT
+    if user_history_df['tools_used'].iloc[0] >= 4:
         return user_history_df['Report Refresh Date'].iloc[0]
+    prev_tools = user_history_df['tools_used'].shift(1).fillna(0)
+    burst_mask = (prev_tools <= 2) & (user_history_df['tools_used'] >= 4)
+    if burst_mask.any():
+        return user_history_df.loc[burst_mask, 'Report Refresh Date'].iloc[0]
+    return user_history_df['Report Refresh Date'].iloc[0]
 
     def get_manager_classification(self, row):
-        # Use the max report date as reference for consistency
-        today = self.reference_date
-        last_seen = pd.to_datetime(row['Overall Recency']) if pd.notna(row['Overall Recency']) else pd.NaT
-        first_seen = pd.to_datetime(row.get('Adoption Date')) if pd.notna(row.get('Adoption Date')) else (pd.to_datetime(row['First Appearance']) if pd.notna(row['First Appearance']) else pd.NaT)
-        if pd.notna(first_seen) and (today - first_seen).days < 90:
-            return "New User"
-        if pd.notna(last_seen) and (today - last_seen).days > 90:
-            return "License Recapture"
-        
-        # Use adjusted consistency for classification
-        consistency_metric = row['Adjusted Consistency (%)']
-        
-        if consistency_metric > 75 and row['Usage Complexity'] > 10:
-            return "Power User"
-        if consistency_metric > 75:
-            return "Consistent User"
-        if consistency_metric > 25:
-            return "Coaching Opportunity"
+    # Use the max report date as reference for consistency
+    today = self.reference_date
+    last_seen = pd.to_datetime(row['Overall Recency']) if pd.notna(row['Overall Recency']) else pd.NaT
+    first_seen = pd.to_datetime(row.get('Adoption Date')) if pd.notna(row.get('Adoption Date')) else (pd.to_datetime(row['First Appearance']) if pd.notna(row['First Appearance']) else pd.NaT)
+    if pd.notna(first_seen) and (today - first_seen).days < 90:
+        return "New User"
+    if pd.notna(last_seen) and (today - last_seen).days > 90:
         return "License Recapture"
+    
+    # Use adjusted consistency for classification
+    consistency_metric = row['Adjusted Consistency (%)']
+    
+    if consistency_metric > 75 and row['Usage Complexity'] > 10:
+        return "Power User"
+    if consistency_metric > 75:
+        return "Consistent User"
+    if consistency_metric > 25:
+        return "Coaching Opportunity"
+    return "License Recapture"
 
     def get_justification(self, row):
         classification = row['Classification']
