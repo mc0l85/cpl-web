@@ -9,6 +9,13 @@ import os
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import PatternFill, Font, Alignment
 from openpyxl.formatting.rule import ColorScaleRule, DataBarRule
+from openpyxl.chart import LineChart, Reference
+from openpyxl.chart.axis import DateAxis
+from openpyxl.chart.label import DataLabelList
+from openpyxl.chart.shapes import GraphicalProperties
+from openpyxl.drawing.line import LineProperties
+from openpyxl.drawing.colors import ColorChoice # Import ColorChoice
+from openpyxl.styles.colors import Color
 from datetime import datetime
 import config
 
@@ -140,6 +147,7 @@ class AnalysisRunner:
                 activity_dates = pd.to_datetime(user_data[copilot_tool_cols].stack().dropna().unique())
                 if len(activity_dates) == 0:
                     first_activity, last_activity, active_months, complexity, avg_tools_per_month, trend = pd.NaT, pd.NaT, 0, 0, 0, "N/A"
+                    trend_details = {}
                     report_dates = user_data['Report Refresh Date'].unique()
                     if len(report_dates) > 0: first_activity = pd.to_datetime(report_dates).min()
                 else:
@@ -157,6 +165,7 @@ class AnalysisRunner:
                     trend = "N/A"
                     trend_details = {}
                     
+                    trend_details = {}
                     if len(activity_dates) > 1:
                         # Get report-level activity
                         report_activity = user_data.groupby('Report Refresh Date')[copilot_tool_cols].apply(
@@ -336,8 +345,12 @@ class AnalysisRunner:
             self.utilized_metrics_df['Classification'] = self.utilized_metrics_df.apply(self.get_manager_classification, axis=1)
             self.utilized_metrics_df['Justification'] = self.utilized_metrics_df.apply(self.get_justification, axis=1)
             reallocation_df, under_utilized_df, top_utilizers_df = self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'For Reallocation'], self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'Under-Utilized'], self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'Top Utilizer']
-            self.update_status("4. Generating reports in memory...")
-            excel_bytes = self.create_excel_report(top_utilizers_df, under_utilized_df, reallocation_df, self.utilized_metrics_df)
+
+            self.update_status("4. Calculating usage complexity over time...")
+            usage_complexity_trend_df = self.calculate_usage_complexity_over_time(utilized_emails)
+
+            self.update_status("5. Generating reports in memory...")
+            excel_bytes = self.create_excel_report(top_utilizers_df, under_utilized_df, reallocation_df, self.utilized_metrics_df, usage_complexity_trend_df)
             leaderboard_html = self.create_leaderboard_html(self.utilized_metrics_df)
             debug_files = {}
             try:
@@ -402,6 +415,63 @@ class AnalysisRunner:
             traceback.print_exc()
             return {'error': f"An unexpected error occurred: {str(e)}"}
 
+
+    def calculate_usage_complexity_over_time(self, utilized_emails):
+        self.update_status("Calculating usage complexity trend...")
+        if self.full_usage_data is None or self.full_usage_data.empty:
+            return pd.DataFrame()
+
+        # Ensure 'Report Refresh Date' is datetime and set as index
+        df = self.full_usage_data.copy()
+        df['Report Refresh Date'] = pd.to_datetime(df['Report Refresh Date'], errors='coerce')
+        df.set_index('Report Refresh Date', inplace=True)
+        df.sort_index(inplace=True)
+
+        # Identify tool columns dynamically
+        copilot_tool_cols = [col for col in df.columns if 'Last activity date of' in col]
+        if not copilot_tool_cols:
+            self.update_status("No tool columns found for complexity calculation.")
+            return pd.DataFrame()
+
+        all_users = df['User Principal Name'].unique()
+        all_months = pd.to_datetime(df.index.unique().to_period('M').to_timestamp()).unique()
+
+        # Create a DataFrame with all user-month combinations
+        from itertools import product
+        all_combinations = pd.DataFrame(list(product(all_users, all_months)), columns=['User Principal Name', 'Month'])
+        all_combinations.set_index(['User Principal Name', 'Month'], inplace=True)
+
+        # Calculate complexity for each user per report date
+        df['complexity_per_report'] = df[copilot_tool_cols].notna().sum(axis=1)
+        
+        # Group original data by user and month, and get max complexity for each user in each month
+        monthly_user_complexity = df.groupby(['User Principal Name', pd.Grouper(freq='M')])['complexity_per_report'].max()
+
+        # Join with all combinations to ensure all user-month combinations are present
+        # Fill NaN with 0 for users who had no activity in a given month
+        full_user_monthly_complexity = all_combinations.join(monthly_user_complexity).fillna(0).reset_index()
+
+        # Global average complexity per month
+        global_complexity = full_user_monthly_complexity.groupby('Month')['complexity_per_report'].mean()
+        global_complexity = global_complexity.to_frame(name='Global Usage Complexity')
+
+        # Target average complexity per month
+        target_user_monthly_complexity = full_user_monthly_complexity[full_user_monthly_complexity['User Principal Name'].isin(utilized_emails)]
+        target_complexity = target_user_monthly_complexity.groupby('Month')['complexity_per_report'].mean()
+        target_complexity = target_complexity.to_frame(name='Target Usage Complexity')
+        # print(f"Target Complexity:\n{target_complexity}")
+
+        # Combine into a single DataFrame
+        trend_df = pd.concat([global_complexity, target_complexity], axis=1).fillna(0)
+        trend_df.index.name = 'Report Refresh Date'
+        trend_df.reset_index(inplace=True)
+        
+        # Convert month-end timestamp to YYYY-MM format for display
+        trend_df['Report Refresh Period'] = trend_df['Report Refresh Date'].dt.strftime('%Y-%m')
+        
+        self.update_status("Usage complexity trend calculated.")
+        return trend_df
+
     def style_excel_sheet(self, worksheet, df):
         if df.empty: return
         header_fill = PatternFill(start_color="2d3748", end_color="2d3748", fill_type="solid")
@@ -433,7 +503,7 @@ class AnalysisRunner:
             cell_range = f"{col_letter}2:{col_letter}{len(df)+1}"
             worksheet.conditional_formatting.add(cell_range, ColorScaleRule(start_type='min', start_color=yellow, mid_type='percentile', mid_value=50, mid_color=yellow, end_type='max', end_color=green))
 
-    def create_excel_report(self, top_df, under_df, realloc_df, all_df=None):
+    def create_excel_report(self, top_df, under_df, realloc_df, all_df=None, usage_complexity_trend_df=None):
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             cols = ['Global Rank', 'Email', 'Classification', 'Adjusted Consistency (%)', 'Usage Consistency (%)', 'Overall Recency', 'Usage Complexity', 'Avg Tools / Report', 'Adoption Velocity', 'Tool Expansion Rate', 'Days Since License', 'Usage Trend', 'Engagement Score', 'Justification']
@@ -452,15 +522,63 @@ class AnalysisRunner:
                     subset = all_df[all_df['Classification'].str.startswith(cat)]
                     sheets[cat_map[cat]] = subset.sort_values(by="Global Rank")
             wrote_any = False
-            for sheet_name, df in sheets.items():
-                df_local = df.copy()
-                for c in cols:
-                    if c not in df_local.columns:
-                        df_local[c] = pd.Series([np.nan]*len(df_local))
-                df_to_write = df_local[cols] if not df_local.empty else pd.DataFrame(columns=cols)
-                df_to_write.to_excel(writer, sheet_name=sheet_name, index=False, float_format="%.2f")
-                self.style_excel_sheet(writer.sheets[sheet_name], df_to_write)
-                wrote_any = wrote_any or not df_to_write.empty
+            
+                        # Add Usage_Trend sheet at the end
+            if usage_complexity_trend_df is not None and not usage_complexity_trend_df.empty:
+                sheet_name = "Usage_Trend"
+                usage_complexity_trend_df.to_excel(writer, sheet_name=sheet_name, index=False)
+                trend_ws = writer.sheets[sheet_name]
+
+                # Create a Line Chart
+                chart = LineChart()
+                chart.title = "Usage Complexity Over Time"
+                chart.style = 10  # A predefined chart style
+                chart.x_axis.title = "Report Refresh Period"
+                chart.y_axis.title = "Average Tools Used"
+
+                # Set x-axis to be date axis
+                chart.x_axis = DateAxis(crossAx=100)
+                chart.x_axis.numberFormat = 'yyyy-mm'
+                chart.x_axis.majorUnit = 1  # Display every month
+                chart.x_axis.clean = True
+                chart.x_axis.scaling.orientation = "minMax"
+
+                # Data for the chart
+                data = Reference(trend_ws, min_col=2, min_row=1, max_col=trend_ws.max_column, max_row=trend_ws.max_row)
+                categories = Reference(trend_ws, min_col=1, min_row=2, max_row=trend_ws.max_row)
+                
+                chart.add_data(data, titles_from_data=True)
+                chart.set_categories(categories)
+                
+                # Style the lines
+                s1 = chart.series[0] # Global Usage Complexity
+                s1.graphicalProperties.line.solidFill = "FF0000" # Red
+                s1.graphicalProperties.line.width = 30000 # 3pt
+                s1.dLbls = DataLabelList() # No labels
+
+                s2 = chart.series[1] # Target Usage Complexity
+                s2.graphicalProperties.line.solidFill = "00B0F0" # Blue
+                s2.graphicalProperties.line.width = 30000 # 3pt
+                s2.dLbls = DataLabelList() # No labels
+
+                # Add the chart to the sheet
+                trend_ws.add_chart(chart, "A10") # Position the chart
+                
+                # Auto-fit columns for the trend sheet
+                for column in trend_ws.columns:
+                    max_length = 0
+                    column = [cell for cell in column]
+                    for cell in column:
+                        try:
+                            if len(str(cell.value)) > max_length:
+                                max_length = len(str(cell.value))
+                        except:
+                            pass
+                    adjusted_width = (max_length + 2)
+                    trend_ws.column_dimensions[column[0].column_letter].width = adjusted_width
+
+                wrote_any = True # Indicate that at least one sheet was written
+            
             writer.book.active = 0
         if not wrote_any:
             return None
