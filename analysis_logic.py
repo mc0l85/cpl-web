@@ -544,7 +544,7 @@ class CopilotAnalyzer:
                 clean_trend_df.to_excel(writer, sheet_name=sheet_name, index=False)
                 trend_ws = writer.sheets[sheet_name]
 
-try:
+                try:
                     # Create a professional Line Chart
                     chart = LineChart()
                     chart.title = "Usage Complexity Over Time"
