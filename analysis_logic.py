@@ -421,56 +421,50 @@ class AnalysisRunner:
         if self.full_usage_data is None or self.full_usage_data.empty:
             return pd.DataFrame()
 
-        # Ensure 'Report Refresh Date' is datetime and set as index
+        # Ensure 'Report Refresh Date' is datetime
         df = self.full_usage_data.copy()
         df['Report Refresh Date'] = pd.to_datetime(df['Report Refresh Date'], errors='coerce')
-        df.set_index('Report Refresh Date', inplace=True)
-        df.sort_index(inplace=True)
-
+        
         # Identify tool columns dynamically
         copilot_tool_cols = [col for col in df.columns if 'Last activity date of' in col]
         if not copilot_tool_cols:
             self.update_status("No tool columns found for complexity calculation.")
             return pd.DataFrame()
 
-        all_users = df['User Principal Name'].unique()
-        all_months = pd.to_datetime(df.index.unique().to_period('M').to_timestamp()).unique()
-
-        # Create a DataFrame with all user-month combinations
-        from itertools import product
-        all_combinations = pd.DataFrame(list(product(all_users, all_months)), columns=['User Principal Name', 'Month'])
-        all_combinations.set_index(['User Principal Name', 'Month'], inplace=True)
-
-        # Calculate complexity for each user per report date
+        # Calculate complexity for each report (number of tools used)
         df['complexity_per_report'] = df[copilot_tool_cols].notna().sum(axis=1)
         
-        # Group original data by user and month, and get max complexity for each user in each month
-        monthly_user_complexity = df.groupby(['User Principal Name', pd.Grouper(freq='M')])['complexity_per_report'].max()
-
-        # Join with all combinations to ensure all user-month combinations are present
-        # Fill NaN with 0 for users who had no activity in a given month
-        full_user_monthly_complexity = all_combinations.join(monthly_user_complexity).fillna(0).reset_index()
-
-        # Global average complexity per month
-        global_complexity = full_user_monthly_complexity.groupby('Month')['complexity_per_report'].mean()
-        global_complexity = global_complexity.to_frame(name='Global Usage Complexity')
-
-        # Target average complexity per month
-        target_user_monthly_complexity = full_user_monthly_complexity[full_user_monthly_complexity['User Principal Name'].isin(utilized_emails)]
-        target_complexity = target_user_monthly_complexity.groupby('Month')['complexity_per_report'].mean()
-        target_complexity = target_complexity.to_frame(name='Target Usage Complexity')
-        # print(f"Target Complexity:\n{target_complexity}")
-
+        # Create month column for grouping
+        df['Month'] = df['Report Refresh Date'].dt.to_period('M').dt.to_timestamp()
+        
+        # Calculate average complexity per month for all users
+        global_monthly = df.groupby('Month')['complexity_per_report'].agg(['mean', 'count'])
+        global_complexity = global_monthly['mean'].to_frame(name='Global Usage Complexity')
+        
+        # Calculate average complexity per month for target users only
+        target_df = df[df['User Principal Name'].isin(utilized_emails)]
+        if not target_df.empty:
+            target_monthly = target_df.groupby('Month')['complexity_per_report'].agg(['mean', 'count'])
+            target_complexity = target_monthly['mean'].to_frame(name='Target Usage Complexity')
+        else:
+            # If no target users, create empty frame with same index
+            target_complexity = pd.DataFrame(index=global_complexity.index, columns=['Target Usage Complexity'])
+            target_complexity.fillna(0, inplace=True)
+        
         # Combine into a single DataFrame
         trend_df = pd.concat([global_complexity, target_complexity], axis=1).fillna(0)
         trend_df.index.name = 'Report Refresh Date'
         trend_df.reset_index(inplace=True)
         
-        # Convert month-end timestamp to YYYY-MM format for display
+        # Convert month timestamp to YYYY-MM format for display
         trend_df['Report Refresh Period'] = trend_df['Report Refresh Date'].dt.strftime('%Y-%m')
         
         # Reorder columns for chart compatibility: Date, Global, Target, Period
         trend_df = trend_df[['Report Refresh Date', 'Global Usage Complexity', 'Target Usage Complexity', 'Report Refresh Period']]
+        
+        # Round values to 2 decimal places for better display
+        trend_df['Global Usage Complexity'] = trend_df['Global Usage Complexity'].round(2)
+        trend_df['Target Usage Complexity'] = trend_df['Target Usage Complexity'].round(2)
         
         self.update_status("Usage complexity trend calculated.")
         return trend_df
@@ -555,11 +549,11 @@ class AnalysisRunner:
                     chart.title = "Usage Complexity Over Time"
                     chart.style = 2  # Simpler style
                     
-                    # Set axis titles with proper formatting
+                    # Set axis titles
                     chart.x_axis.title = "Period"
                     chart.y_axis.title = "Average Tools Used"
                     
-                    # Position legend at the bottom instead of overlapping
+                    # Position legend at the bottom
                     chart.legend.position = 'b'
 
                     # Get data range - only include actual data rows
@@ -567,30 +561,30 @@ class AnalysisRunner:
                     if num_data_rows > 0:
                         # Data columns: B (Global) and C (Target), starting from row 1 (including headers)
                         data = Reference(trend_ws, min_col=2, min_row=1, max_col=3, max_row=num_data_rows + 1)
-                        # Categories: Column A (Report Refresh Date), starting from row 2 (excluding header)
-                        categories = Reference(trend_ws, min_col=1, min_row=2, max_row=num_data_rows + 1)
+                        # Categories: Column D (Report Refresh Period), starting from row 2 (excluding header)
+                        categories = Reference(trend_ws, min_col=4, min_row=2, max_row=num_data_rows + 1)
                         
                         chart.add_data(data, titles_from_data=True)
                         chart.set_categories(categories)
                         
-                        # Force axis labels to show
-                        chart.x_axis.txPr.textProperties.latin = 'Arial'  # Set font
-                        chart.x_axis.txPr.textProperties.sz = 900  # Font size (9pt)
-                        chart.y_axis.txPr.textProperties.latin = 'Arial'
-                        chart.y_axis.txPr.textProperties.sz = 900
+                        # Set chart size
+                        chart.width = 15  # Width in Excel units
+                        chart.height = 7.5  # Height in Excel units
                         
-                        # Style the lines
+                        # Style the lines with proper color format
                         if len(chart.series) >= 2:
                             s1 = chart.series[0]  # Global Usage Complexity
                             s1.graphicalProperties.line.solidFill = "FF0000"  # Red
                             s1.graphicalProperties.line.width = 25000  # 2.5pt
+                            s1.smooth = True  # Smooth line
                             
                             s2 = chart.series[1]  # Target Usage Complexity
-                            s2.graphicalProperties.line.solidFill = "00B0F0"  # Blue
+                            s2.graphicalProperties.line.solidFill = "0070C0"  # Blue
                             s2.graphicalProperties.line.width = 25000  # 2.5pt
+                            s2.smooth = True  # Smooth line
 
-                        # Add the chart to the sheet with more space
-                        trend_ws.add_chart(chart, "A15")  # Position lower to avoid overlap
+                        # Add the chart to the sheet
+                        trend_ws.add_chart(chart, "F2")  # Position to the right of data
                         
                         # Auto-fit columns for better visibility
                         for column in trend_ws.columns:
@@ -602,7 +596,7 @@ class AnalysisRunner:
                                         max_length = len(str(cell.value))
                                 except:
                                     pass
-                            adjusted_width = max(12, max_length + 2)  # Increase minimum width
+                            adjusted_width = max(12, max_length + 2)
                             trend_ws.column_dimensions[column_letter].width = adjusted_width
 
                         wrote_any = True
