@@ -545,52 +545,46 @@ class CopilotAnalyzer:
                 trend_ws = writer.sheets[sheet_name]
 
                 try:
+                    print("Attempting to create chart...")
                     # Create a simple, reliable Line Chart
                     chart = LineChart()
                     chart.title = "Usage Complexity Over Time"
-                    chart.style = 2  # Simpler style
+                    chart.style = 2  # Simple style
                     
                     # Set axis titles
                     chart.x_axis.title = "Period"
                     chart.y_axis.title = "Average Tools Used"
                     
-                    # Position legend at the bottom and add spacing
+                    # Position legend at the bottom
                     chart.legend.position = 'b'
-                    chart.legend.layout = Layout(manualLayout=ManualLayout(h=0.15, w=0.8, x=0.1, y=0.85))
 
                     # Get data range - only include actual data rows
                     num_data_rows = len(clean_trend_df)
                     if num_data_rows > 0:
+                        print(f"Found {num_data_rows} rows for chart")
+                        
                         # Data columns: B (Global) and C (Target), starting from row 1 (including headers)
                         data = Reference(trend_ws, min_col=2, min_row=1, max_col=3, max_row=num_data_rows + 1)
-                        # Categories: Column D (Report Refresh Period), starting from row 2 (excluding header)
-                        categories = Reference(trend_ws, min_col=4, min_row=2, max_row=num_data_rows + 1)
+                        # Categories: Column A (Report Refresh Date), starting from row 2 (excluding header)
+                        categories = Reference(trend_ws, min_col=1, min_row=2, max_row=num_data_rows + 1)
+                        
+                        print(f"Data range: {data}")
+                        print(f"Categories range: {categories}")
                         
                         chart.add_data(data, titles_from_data=True)
                         chart.set_categories(categories)
                         
-                        # Display numbers on axes
+                        # Set axis formats
                         chart.x_axis.number_format = 'yyyy-mm'
                         chart.y_axis.number_format = '0'
                         
                         # Set chart size
-                        chart.width = 15  # Width in Excel units
-                        chart.height = 7.5  # Height in Excel units
+                        chart.width = 15
+                        chart.height = 7.5
                         
-                        # Style the lines with proper color format
-                        if len(chart.series) >= 2:
-                            s1 = chart.series[0]  # Global Usage Complexity
-                            s1.graphicalProperties.line.solidFill = "FF0000"  # Red
-                            s1.graphicalProperties.line.width = 25000  # 2.5pt
-                            s1.smooth = True  # Smooth line
-                            
-                            s2 = chart.series[1]  # Target Usage Complexity
-                            s2.graphicalProperties.line.solidFill = "0070C0"  # Blue
-                            s2.graphicalProperties.line.width = 25000  # 2.5pt
-                            s2.smooth = True  # Smooth line
-
-                        # Add the chart to the sheet
+                        # Add chart to sheet
                         trend_ws.add_chart(chart, "F2")  # Position to the right of data
+                        print("Chart created and added successfully!")
                         
                         # Auto-fit columns for better visibility
                         for column in trend_ws.columns:
@@ -608,6 +602,8 @@ class CopilotAnalyzer:
                         wrote_any = True
                 except Exception as chart_error:
                     print(f"Chart creation error: {chart_error}")
+                    import traceback
+                    traceback.print_exc()
                     # If chart fails, still mark as wrote_any since data was written
                     wrote_any = True
             
