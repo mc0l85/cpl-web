@@ -11,13 +11,35 @@ from openpyxl.styles import PatternFill, Font, Alignment
 from openpyxl.formatting.rule import ColorScaleRule, DataBarRule
 from openpyxl.chart import LineChart, Reference
 from openpyxl.chart.axis import DateAxis
-from openpyxl.chart.label import DataLabelList
-from openpyxl.chart.shapes import GraphicalProperties
-from openpyxl.drawing.line import LineProperties
-from openpyxl.drawing.colors import ColorChoice # Import ColorChoice
-from openpyxl.styles.colors import Color
-from datetime import datetime
-import config
+from openpyxl.chart.layout import Layout, ManualLayout
+
+# ... (rest of the imports)
+
+class AnalysisRunner:
+    # ... (rest of the class)
+
+    def create_excel_report(self, top_df, under_df, realloc_df, all_df=None, usage_complexity_trend_df=None):
+        # ... (rest of the method)
+        if usage_complexity_trend_df is not None and not usage_complexity_trend_df.empty:
+            # ... (rest of the if block)
+            try:
+                # ... (chart creation)
+                chart.legend.layout = Layout(
+                    manualLayout=ManualLayout(
+                        x=0.25, y=0.9,
+                        h=0.1, w=0.5,
+                        xMode='edge', yMode='edge'
+                    )
+                )
+
+                chart.x_axis.tickLblPos = "low"
+                chart.x_axis.tickLblSkip = 1
+                chart.y_axis.tickLblPos = "low"
+                chart.y_axis.tickLblSkip = 1
+
+                # ... (rest of the try block)
+            except Exception as chart_error:
+                # ... (exception handling)
 
 class AnalysisRunner:
     def __init__(self, socketio, sid):
