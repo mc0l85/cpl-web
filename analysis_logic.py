@@ -570,6 +570,12 @@ class CopilotAnalyzer:
                         chart.add_data(data, titles_from_data=True)
                         chart.set_categories(categories)
                         
+                        # Enable data labels to show values on the chart
+                        for series in chart.series:
+                            series.dLbls = DataLabelList()
+                            series.dLbls.showVal = True  # Show the actual values
+                            series.dLbls.position = 'top'  # Position labels above points
+                        
                         # Set axis formats - x-axis is now text, y-axis is numeric
                         chart.x_axis.number_format = '@'  # Text format for string categories
                         chart.y_axis.number_format = '0.0'  # One decimal place for better readability
