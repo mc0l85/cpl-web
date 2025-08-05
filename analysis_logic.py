@@ -523,7 +523,18 @@ class AnalysisRunner:
                     sheets[cat_map[cat]] = subset.sort_values(by="Global Rank")
             wrote_any = False
             
-                        # Add Usage_Trend sheet at the end
+            # Create all category sheets first
+            for sheet_name, df in sheets.items():
+                df_local = df.copy()
+                for c in cols:
+                    if c not in df_local.columns:
+                        df_local[c] = pd.Series([np.nan]*len(df_local))
+                df_to_write = df_local[cols] if not df_local.empty else pd.DataFrame(columns=cols)
+                df_to_write.to_excel(writer, sheet_name=sheet_name, index=False, float_format="%.2f")
+                self.style_excel_sheet(writer.sheets[sheet_name], df_to_write)
+                wrote_any = wrote_any or not df_to_write.empty
+            
+            # Add Usage_Trend sheet at the end
             if usage_complexity_trend_df is not None and not usage_complexity_trend_df.empty:
                 sheet_name = "Usage_Trend"
                 usage_complexity_trend_df.to_excel(writer, sheet_name=sheet_name, index=False)
