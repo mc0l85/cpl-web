@@ -3,77 +3,573 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Copilot Analyst</title>
+    <title>Copilot Analytics Dashboard</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.3/dist/cyborg/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        :root { --neon-green: #39FF14; }
-        body { background-color: #2a2a2a; } /* Changed background to dark grey */
-        .monitor-frame { background-color: black; border: 3px solid var(--neon-green); border-radius: 15px; padding: 1.5rem 2rem; width: 100%; max-width: 1920px; min-height: 90vh; margin: 2rem auto; box-shadow: 0 0 25px rgba(57, 255, 20, 0.3); display: flex; flex-direction: column; overflow: hidden; }
-        .monitor-content { flex-grow: 1; overflow-y: auto; padding-right: 15px; }
-        .monitor-content::-webkit-scrollbar { width: 8px; }
-        .monitor-content::-webkit-scrollbar-track { background: #222; }
-        .monitor-content::-webkit-scrollbar-thumb { background: var(--neon-green); border-radius: 4px; }
-        .nav-tabs .nav-link.active { background-color: var(--neon-green); border-color: var(--neon-green); color: black; font-weight: bold; }
-        .btn-success { background-color: var(--neon-green); border-color: var(--neon-green); color: black; font-weight: bold; }
-        .btn-success:hover { background-color: white; border-color: white; color: black; }
-        .progress-bar { background-color: var(--neon-green); }
-        .card { border-color: var(--neon-green); background-color: #060606; }
-        .card-header { background-color: #2a2a2a; border-bottom: 1px solid var(--neon-green); }
-        .metric-card { text-align: center; padding: 1rem; border-radius: .5rem; color: white; background-color: #3a3a3a; border: 1px solid #333; display: flex; flex-direction: column; justify-content: center; height: 100%; }
-        .metric-card h1 { font-size: 3rem; }
-        #deep-dive-results, .chart-container { background-color: #060606 !important; border: 1px solid var(--neon-green); }
-        .chart-container { display: flex; align-items: center; justify-content: center; min-height: 300px; }
+        :root { 
+            --neon-green: #39FF14;
+            --neon-green-dim: #2fb912;
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #1a1a1a;
+            --bg-tertiary: #2a2a2a;
+            --border-color: #333;
+            --text-muted: #888;
+        }
+        
+        * { box-sizing: border-box; }
+        
+        body { 
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        /* Main Container */
+        .dashboard-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        /* Header */
+        .dashboard-header {
+            text-align: center;
+            margin-bottom: 3rem;
+            position: relative;
+        }
+        
+        .dashboard-title {
+            font-size: 2.5rem;
+            font-weight: 300;
+            letter-spacing: 2px;
+            color: #fff;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+        }
+        
+        .dashboard-subtitle {
+            color: var(--text-muted);
+            font-size: 1rem;
+            letter-spacing: 1px;
+        }
+        
+        .glow-text {
+            text-shadow: 0 0 10px var(--neon-green), 0 0 20px var(--neon-green);
+        }
+        
+        /* Modern Tab Navigation */
+        .modern-tabs {
+            gap: 1rem;
+            margin-bottom: 2rem;
+            background: var(--bg-secondary);
+            padding: 0.5rem;
+            border-radius: 12px;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+            border: none;
+        }
+        
+        .modern-tabs .nav-item {
+            flex: 1;
+        }
+        
+        .modern-tab {
+            width: 100%;
+            padding: 1rem 2rem;
+            background: transparent !important;
+            border: none !important;
+            color: var(--text-muted);
+            font-weight: 500;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .modern-tab:hover {
+            color: #fff !important;
+            background: rgba(57, 255, 20, 0.1) !important;
+        }
+        
+        .modern-tab.active {
+            background: var(--neon-green) !important;
+            color: #000 !important;
+            font-weight: 600;
+            box-shadow: 0 0 20px rgba(57, 255, 20, 0.5);
+        }
+        
+        .modern-tab i {
+            margin-right: 0.5rem;
+        }
+        
+        /* Cards */
+        .glass-card {
+            background: rgba(26, 26, 26, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(57, 255, 20, 0.2);
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .glass-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+            border-color: rgba(57, 255, 20, 0.4);
+        }
+        
+        .card-header-modern {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid rgba(57, 255, 20, 0.2);
+        }
+        
+        .card-header-modern i {
+            color: var(--neon-green);
+            font-size: 1.25rem;
+        }
+        
+        .card-header-modern h5 {
+            margin: 0;
+            font-weight: 500;
+            color: #fff;
+            font-size: 1.1rem;
+        }
+        
+        /* Metric Cards */
+        .metric-card-modern {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+            border: 1px solid rgba(57, 255, 20, 0.2);
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .metric-card-modern::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(57, 255, 20, 0.1) 0%, transparent 70%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .metric-card-modern:hover::before {
+            opacity: 1;
+        }
+        
+        .metric-card-modern:hover {
+            transform: translateY(-4px);
+            border-color: var(--neon-green);
+            box-shadow: 0 8px 24px rgba(57, 255, 20, 0.2);
+        }
+        
+        .metric-value {
+            font-size: 3.5rem;
+            font-weight: 700;
+            color: var(--neon-green);
+            line-height: 1;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 0 20px rgba(57, 255, 20, 0.5);
+        }
+        
+        .metric-label {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        /* Buttons */
+        .btn-neon {
+            background: linear-gradient(135deg, var(--neon-green) 0%, var(--neon-green-dim) 100%);
+            border: none;
+            color: #000;
+            font-weight: 600;
+            padding: 0.75rem 2rem;
+            border-radius: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(57, 255, 20, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-neon:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(57, 255, 20, 0.5);
+            background: linear-gradient(135deg, #fff 0%, var(--neon-green) 100%);
+        }
+        
+        .btn-neon:active {
+            transform: translateY(0);
+        }
+        
+        .btn-neon i {
+            margin-right: 0.5rem;
+        }
+        
+        /* Neon Outline Button */
+        .btn-neon-outline {
+            background: transparent;
+            border: 1px solid var(--neon-green);
+            color: var(--neon-green);
+            font-weight: 500;
+            padding: 0.5rem 1.5rem;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 0.875rem;
+        }
+        
+        .btn-neon-outline:hover {
+            background: var(--neon-green);
+            color: #000;
+            box-shadow: 0 0 15px rgba(57, 255, 20, 0.5);
+            transform: translateY(-1px);
+        }
+        
+        .btn-neon-outline:active {
+            transform: translateY(0);
+        }
+        
+        /* Form Controls */
+        .form-control-modern {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: #fff;
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            transition: all 0.3s ease;
+        }
+        
+        .form-control-modern:focus {
+            background: var(--bg-secondary);
+            border-color: var(--neon-green);
+            color: #fff;
+            box-shadow: 0 0 0 0.2rem rgba(57, 255, 20, 0.25);
+        }
+        
+        .form-select-modern {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: #fff;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        .form-select-modern:focus {
+            border-color: var(--neon-green);
+            box-shadow: 0 0 0 0.2rem rgba(57, 255, 20, 0.25);
+        }
+        
+        /* File Upload Area */
+        .upload-area {
+            border: 2px dashed rgba(57, 255, 20, 0.4);
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            background: rgba(57, 255, 20, 0.05);
+        }
+        
+        .upload-area:hover {
+            border-color: var(--neon-green);
+            background: rgba(57, 255, 20, 0.1);
+            border-style: solid;
+        }
+        
+        .upload-area i {
+            font-size: 3rem;
+            color: var(--neon-green);
+            margin-bottom: 1rem;
+            opacity: 0.8;
+        }
+        
+        .upload-area p {
+            color: #aaa;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+        
+        /* Status Messages */
+        .status-message {
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .status-success {
+            background: rgba(57, 255, 20, 0.1);
+            border: 1px solid rgba(57, 255, 20, 0.3);
+            color: var(--neon-green);
+        }
+        
+        .status-error {
+            background: rgba(255, 65, 54, 0.1);
+            border: 1px solid rgba(255, 65, 54, 0.3);
+            color: #ff4136;
+        }
+        
+        /* Charts */
+        .chart-container-modern {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1rem;
+            min-height: 300px;
+        }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+            border-radius: 5px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: var(--neon-green);
+            border-radius: 5px;
+            box-shadow: 0 0 5px rgba(57, 255, 20, 0.5);
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #fff;
+        }
+        
+        /* Loading Animation */
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--neon-green);
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .dashboard-container {
+                padding: 1rem;
+            }
+            
+            .dashboard-title {
+                font-size: 1.75rem;
+            }
+            
+            .modern-tabs {
+                flex-direction: column;
+            }
+            
+            .metric-value {
+                font-size: 2.5rem;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="monitor-frame">
-        <div class="monitor-content">
-            <h3 class="mb-4">Copilot Usage Analysis Tool</h3>
-            <ul class="nav nav-tabs" id="myTab" role="tablist">
-                <li class="nav-item" role="presentation"><button class="nav-link active" id="analysis-tab" data-bs-toggle="tab" data-bs-target="#analysis-pane" type="button" role="tab">Analysis</button></li>
-                <li class="nav-item" role="presentation"><button class="nav-link" id="deepdive-tab" data-bs-toggle="tab" data-bs-target="#deepdive-pane" type="button" role="tab">Deep Dive</button></li>
-            </ul>
-            <div class="tab-content" id="myTabContent">
-                <!-- ANALYSIS TAB -->
-                <div class="tab-pane fade show active p-3" id="analysis-pane" role="tabpanel">
-                    <div class="row g-4 h-100">
-                        <div class="col-lg-4 d-flex flex-column">
-                            <div class="card mb-4"><div class="card-header fw-bold">1. Select Input Files</div><div class="card-body"><div class="mb-3"><label for="targetUsersFile" class="form-label">Target Users File (Optional CSV)</label><input class="form-control" type="file" id="targetUsersFile" accept=".csv,.txt"><div id="target-file-status" class="form-text"></div></div><div><label for="usageReports" class="form-label">Usage Reports (CSV/Excel)</label><input class="form-control" type="file" id="usageReports" accept=".csv,.xlsx,.xls" multiple><div id="usage-files-status" class="form-text"></div></div></div></div>
-                            <div class="mt-auto"><div class="d-grid gap-2"><button id="run-analysis-btn" class="btn btn-lg btn-success">Run Analysis</button></div><p id="status-label" class="mt-2 text-center"></p><div id="reports-container" class="mt-4 d-grid" style="display: none;"><button id="download-btn" class="btn btn-primary btn-lg"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-download me-2" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>Download Outputs</button></div></div>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <div class="dashboard-header">
+            <h1 class="dashboard-title">
+                <i class="fas fa-chart-line" style="color: var(--neon-green);"></i>
+                Copilot Analytics <span class="glow-text">Dashboard</span>
+            </h1>
+            <p class="dashboard-subtitle">AI-Powered Usage Intelligence Platform</p>
+        </div>
+        
+        <!-- Modern Tab Navigation -->
+        <ul class="nav nav-pills modern-tabs" id="myTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link modern-tab active" id="analysis-tab" data-bs-toggle="tab" data-bs-target="#analysis-pane" type="button" role="tab" aria-controls="analysis-pane" aria-selected="true">
+                    <i class="fas fa-analytics"></i>Analysis
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link modern-tab" id="deepdive-tab" data-bs-toggle="tab" data-bs-target="#deepdive-pane" type="button" role="tab" aria-controls="deepdive-pane" aria-selected="false">
+                    <i class="fas fa-microscope"></i>Deep Dive
+                </button>
+            </li>
+        </ul>
+        <div class="tab-content" id="myTabContent">
+            <!-- ANALYSIS TAB -->
+            <div class="tab-pane fade show active" id="analysis-pane" role="tabpanel">
+                <div class="row g-4">
+                    <!-- Left Column -->
+                    <div class="col-lg-4">
+                        <!-- File Upload Card -->
+                        <div class="glass-card mb-4">
+                            <div class="card-header-modern">
+                                <i class="fas fa-file-upload"></i>
+                                <h5>Data Sources</h5>
+                            </div>
+                            
+                            <div class="mb-4">
+                                <label class="form-label text-muted small">Target Users (Optional)</label>
+                                <div class="upload-area">
+                                    <i class="fas fa-users"></i>
+                                    <p class="mb-2">Drop CSV file here or click to browse</p>
+                                    <input class="form-control form-control-modern" type="file" id="targetUsersFile" accept=".csv,.txt" style="display: none;">
+                                    <button class="btn btn-sm btn-neon-outline" onclick="document.getElementById('targetUsersFile').click()">
+                                        <i class="fas fa-folder-open"></i> Select File
+                                    </button>
+                                </div>
+                                <div id="target-file-status" class="mt-2"></div>
+                            </div>
+                            
+                            <div>
+                                <label class="form-label text-muted small">Usage Reports (Required)</label>
+                                <div class="upload-area">
+                                    <i class="fas fa-file-csv"></i>
+                                    <p class="mb-2">Drop CSV/Excel files here or click to browse</p>
+                                    <input class="form-control form-control-modern" type="file" id="usageReports" accept=".csv,.xlsx,.xls" multiple style="display: none;">
+                                    <button class="btn btn-sm btn-neon-outline" onclick="document.getElementById('usageReports').click()">
+                                        <i class="fas fa-folder-open"></i> Select Files
+                                    </button>
+                                </div>
+                                <div id="usage-files-status" class="mt-2"></div>
+                            </div>
                         </div>
-                        <div class="col-lg-8 d-flex flex-column">
-                            <div class="card mb-4"><div class="card-header fw-bold">2. Apply Filters (Optional)</div><div class="card-body"><div class="row"><div class="col-md-6 mb-3"><label for="company-filter" class="form-label">Company</label><select multiple class="form-select" id="company-filter" size="5"></select></div><div class="col-md-6 mb-3"><label for="department-filter" class="form-label">Department</label><select multiple class="form-select" id="department-filter" size="5"></select></div><div class="col-md-6"><label for="location-filter" class="form-label">Location (City)</label><select multiple class="form-select" id="location-filter" size="5"></select></div><div class="col-md-6"><label for="manager-filter" class="form-label">Manager</label><select multiple class="form-select" id="manager-filter" size="5"></select></div></div></div></div>
-                            <div class="card flex-grow-1"><div class="card-header fw-bold">3. Analysis Snapshot</div><div class="card-body"><div class="row text-center g-3 h-100">
-                                <div class="col-md-2">
-                                    <div class="metric-card w-100">
-                                        <h1 id="total-users" class="display-4 fw-bold">0</h1>
-                                        <p class="mb-0">Total Users</p>
+                        
+                        <!-- Action Buttons -->
+                        <div class="d-grid gap-3">
+                            <button id="run-analysis-btn" class="btn btn-neon btn-lg">
+                                <i class="fas fa-play"></i> Run Analysis
+                            </button>
+                            <div id="status-label" class="text-center text-muted"></div>
+                            <div id="reports-container" style="display: none;">
+                                <button id="download-btn" class="btn btn-outline-light btn-lg">
+                                    <i class="fas fa-download"></i> Download Reports
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Right Column -->
+                    <div class="col-lg-8">
+                        <!-- Filters Card -->
+                        <div class="glass-card mb-4">
+                            <div class="card-header-modern">
+                                <i class="fas fa-filter"></i>
+                                <h5>Smart Filters</h5>
+                            </div>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label text-muted small">Company</label>
+                                    <select multiple class="form-select form-select-modern" id="company-filter" size="4"></select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label text-muted small">Department</label>
+                                    <select multiple class="form-select form-select-modern" id="department-filter" size="4"></select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label text-muted small">Location</label>
+                                    <select multiple class="form-select form-select-modern" id="location-filter" size="4"></select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label text-muted small">Manager</label>
+                                    <select multiple class="form-select form-select-modern" id="manager-filter" size="4"></select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Analytics Dashboard -->
+                        <div class="glass-card">
+                            <div class="card-header-modern">
+                                <i class="fas fa-chart-pie"></i>
+                                <h5>Analytics Overview</h5>
+                            </div>
+                            <div class="row g-4">
+                                <div class="col-md-4">
+                                    <div class="metric-card-modern">
+                                        <div class="metric-value" id="total-users">0</div>
+                                        <div class="metric-label">Total Users</div>
                                     </div>
                                 </div>
-                                <div class="col-md-2"><div class="metric-card" id="power-user-chart"></div></div>
-                                <div class="col-md-2"><div class="metric-card" id="consistent-user-chart"></div></div>
-                                <div class="col-md-2"><div class="metric-card" id="coaching-opportunity-chart"></div></div>
-                                <div class="col-md-2"><div class="metric-card" id="new-user-chart"></div></div>
-                                <div class="col-md-2"><div class="metric-card" id="recapture-chart"></div></div>
-                            </div></div></div>
+                                <div class="col-md-8">
+                                    <div class="chart-container-modern" id="distribution-chart"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <!-- DEEP DIVE TAB -->
-                <div class="tab-pane fade p-3" id="deepdive-pane" role="tabpanel">
-                     <div class="card"><div class="card-header fw-bold">User Search</div><div class="card-body"><p>Enter a user's email for a detailed analysis. Run an analysis on the 'Analysis' tab first to load data.</p><div class="input-group mb-3"><input type="email" id="user-email-entry" class="form-control" placeholder="user@example.com"><button class="btn btn-success" type="button" id="search-btn">Search</button></div>
-                     <!-- THIS IS THE UPDATED LAYOUT -->
-                     <div class="row mt-4">
-                         <div class="col-md-5">
-                             <h6>Statistics & Details</h6>
-                             <pre id="deep-dive-results" class="p-3 rounded" style="min-height: 450px;"></pre>
-                         </div>
-                         <div class="col-md-7">
-                             <h6>Complexity Trends</h6>
-                             <div id="deep-dive-chart-container" class="p-2 rounded" style="min-height: 350px; border: 1px solid var(--neon-green);"></div>
-                         </div>
-                     </div>
-                     </div></div>
+            </div>
+            <!-- DEEP DIVE TAB -->
+            <div class="tab-pane fade" id="deepdive-pane" role="tabpanel">
+                <div class="glass-card mb-4">
+                    <div class="card-header-modern">
+                        <i class="fas fa-search"></i>
+                        <h5>User Deep Dive Analysis</h5>
+                    </div>
+                    <p class="text-muted mb-4">Explore detailed insights for individual users. Make sure to run the analysis first.</p>
+                    
+                    <div class="input-group mb-4">
+                        <span class="input-group-text bg-dark border-secondary">
+                            <i class="fas fa-envelope"></i>
+                        </span>
+                        <input type="email" id="user-email-entry" class="form-control form-control-modern" placeholder="user@example.com">
+                        <button class="btn btn-neon" type="button" id="search-btn">
+                            <i class="fas fa-search"></i> Analyze User
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="row g-4">
+                    <div class="col-lg-5">
+                        <div class="glass-card h-100">
+                            <div class="card-header-modern">
+                                <i class="fas fa-info-circle"></i>
+                                <h5>User Metrics</h5>
+                            </div>
+                            <pre id="deep-dive-results" class="p-3 rounded" style="min-height: 400px; font-size: 0.9rem; background-color: var(--bg-secondary); color: #fff;"></pre>
+                        </div>
+                    </div>
+                    <div class="col-lg-7">
+                        <div class="glass-card h-100">
+                            <div class="card-header-modern">
+                                <i class="fas fa-chart-line"></i>
+                                <h5>Usage Trends</h5>
+                            </div>
+                            <div id="deep-dive-chart-container" class="chart-container-modern" style="min-height: 400px;"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

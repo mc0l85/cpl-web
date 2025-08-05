@@ -18,37 +18,138 @@ document.addEventListener("DOMContentLoaded", function() {
     const deepDiveResults = document.getElementById('deep-dive-results');
     const deepDiveChartContainer = document.getElementById('deep-dive-chart-container');
     let deepDiveChart = null;
+    
+    // Debug: Check if elements exist
+    console.log('Search button found:', searchBtn);
+    console.log('Email entry found:', userEmailEntry);
+    console.log('Deep dive results found:', deepDiveResults);
+    console.log('Chart container found:', deepDiveChartContainer);
+    
+    // Manual tab handling as fallback
+    const analysisTab = document.getElementById('analysis-tab');
+    const deepdiveTab = document.getElementById('deepdive-tab');
+    const analysisPane = document.getElementById('analysis-pane');
+    const deepdivePane = document.getElementById('deepdive-pane');
+    
+    if (deepdiveTab && analysisTab && analysisPane && deepdivePane) {
+        deepdiveTab.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('Deep dive tab clicked');
+            
+            // Remove active classes
+            analysisTab.classList.remove('active');
+            analysisPane.classList.remove('show', 'active');
+            
+            // Add active classes
+            deepdiveTab.classList.add('active');
+            deepdivePane.classList.add('show', 'active');
+        });
+        
+        analysisTab.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('Analysis tab clicked');
+            
+            // Remove active classes
+            deepdiveTab.classList.remove('active');
+            deepdivePane.classList.remove('show', 'active');
+            
+            // Add active classes
+            analysisTab.classList.add('active');
+            analysisPane.classList.add('show', 'active');
+        });
+    }
 
-    // Charting Setup
-    function createRadialChart(elementId, label, color) {
-        const options = { 
-            chart: { type: 'radialBar', height: 200, sparkline: { enabled: true } }, 
-            series: [0], 
+    // Charting Setup with modern styling
+    function createDistributionChart(elementId) {
+        const options = {
+            chart: { 
+                type: 'donut', 
+                height: 280, 
+                background: 'transparent',
+                foreColor: '#888',
+                toolbar: { show: false },
+                animations: {
+                    enabled: true,
+                    easing: 'easeinout',
+                    speed: 800,
+                    animateGradually: {
+                        enabled: true,
+                        delay: 150
+                    },
+                    dynamicAnimation: {
+                        enabled: true,
+                        speed: 350
+                    }
+                }
+            },
+            series: [],
+            labels: [],
+            // Meaningful colors that work well on dark backgrounds
+            // Power Users: Bright green (high performance)
+            // Consistent Users: Teal (steady, reliable)
+            // Coaching Needed: Amber (warning, needs attention)
+            // New Users: Blue (fresh, learning)
+            // License Recapture: Muted red (inactive, remove)
+            colors: ["#39FF14", "#14b8a6", "#f59e0b", "#60a5fa", "#dc2626"],
             plotOptions: { 
-                radialBar: { 
-                    hollow: { size: '60%' }, 
-                    dataLabels: { 
-                        name: { offsetY: -10, color: "#fff", fontSize: '1em' }, 
-                        value: { offsetY: 5, color: "#fff", fontSize: '1.5em', formatter: (val) => val }, 
-                    }, 
-                    track: { background: '#3a3a3a' }
+                pie: { 
+                    donut: { 
+                        size: '65%',
+                        labels: { 
+                            show: true, 
+                            total: { 
+                                show: true, 
+                                label: 'Total',
+                                fontSize: '16px',
+                                fontWeight: 600,
+                                color: '#fff',
+                                formatter: function (w) {
+                                    return w.globals.seriesTotals.reduce((a, b) => a + b, 0)
+                                }
+                            } 
+                        } 
+                    },
+                    expandOnClick: true,
+                    dataLabels: {
+                        offset: 0,
+                        minAngleToShowLabel: 10
+                    }
                 } 
-            }, 
-            labels: [label], 
-            colors: [color], 
-            theme: { mode: 'dark' } 
+            },
+            legend: { 
+                position: 'bottom', 
+                labels: { colors: ['#888'] },
+                fontSize: '12px'
+            },
+            stroke: {
+                show: true,
+                width: 2,
+                colors: ['#1a1a1a']  // Dark stroke to separate segments
+            },
+            dataLabels: {
+                enabled: true,
+                style: {
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    colors: ['#000', '#fff', '#000', '#000', '#fff']  // Black text on bright colors, white on dark
+                },
+                dropShadow: {
+                    enabled: true,
+                    top: 1,
+                    left: 1,
+                    blur: 1,
+                    opacity: 0.5
+                }
+            },
+            theme: { mode: 'dark' }
         };
         const chart = new ApexCharts(document.querySelector(elementId), options);
         chart.render();
         return chart;
     }
-    const powerUserChart = createRadialChart("#power-user-chart", "Power Users", "#00bc8c");
-    const consistentUserChart = createRadialChart("#consistent-user-chart", "Consistent Users", "#0d6efd");
-    const coachingChart = createRadialChart("#coaching-opportunity-chart", "Coaching", "#f0ad4e");
-    const newUserChart = createRadialChart("#new-user-chart", "New Users", "#6f42c1");
-    const recaptureChart = createRadialChart("#recapture-chart", "Recapture", "#d9534f");
+    const distributionChart = createDistributionChart("#distribution-chart");
 
-    // File Handling
+    // File Handling with modern UI feedback
     const handleFileUpload = (file, type, statusElement) => {
         const formData = new FormData();
         formData.append('file', file);
@@ -60,11 +161,13 @@ document.addEventListener("DOMContentLoaded", function() {
         })
         .then(data => {
             if (data.status === 'success') {
-                const p = document.createElement('p');
-                p.textContent = `${file.name} loaded.`;
-                p.className = 'text-success small mb-0';
-                statusElement.appendChild(p);
                 if (data.type === 'target') {
+                    // For target file, show individual file status
+                    const statusDiv = document.createElement('div');
+                    statusDiv.className = 'status-message status-success';
+                    statusDiv.innerHTML = `<i class="fas fa-check-circle"></i> ${file.name} loaded successfully`;
+                    statusElement.appendChild(statusDiv);
+                    
                     populateSelect('company-filter', data.filters.companies);
                     populateSelect('department-filter', data.filters.departments);
                     populateSelect('location-filter', data.filters.locations);
@@ -77,7 +180,12 @@ document.addEventListener("DOMContentLoaded", function() {
         })
         .catch(error => {
             console.error('Upload Error:', error);
-            statusElement.innerHTML += `<p class="text-danger small mb-0">Upload failed for ${file.name}.</p>`;
+            if (type === 'target') {
+                const statusDiv = document.createElement('div');
+                statusDiv.className = 'status-message status-error';
+                statusDiv.innerHTML = `<i class="fas fa-exclamation-circle"></i> Failed to upload ${file.name}`;
+                statusElement.appendChild(statusDiv);
+            }
             throw error; // Reject promise
         });
     };
@@ -93,55 +201,111 @@ document.addEventListener("DOMContentLoaded", function() {
         usageFilesStatus.innerHTML = '';
         uploadedUsageFiles = []; 
         runAnalysisBtn.disabled = true;
-        runAnalysisBtn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Uploading...`;
+        runAnalysisBtn.innerHTML = `<span class="loading-spinner"></span> Uploading Files...`;
 
-        const uploadPromises = [...e.target.files].map(file => handleFileUpload(file, 'usage', usageFilesStatus));
+        const totalFiles = e.target.files.length;
+        let successCount = 0;
+        let failCount = 0;
+
+        const uploadPromises = [...e.target.files].map(file => 
+            handleFileUpload(file, 'usage', usageFilesStatus)
+                .then(() => { successCount++; })
+                .catch(() => { failCount++; })
+        );
         
-        Promise.all(uploadPromises)
+        Promise.allSettled(uploadPromises)
             .then(() => {
                 runAnalysisBtn.disabled = false;
-                runAnalysisBtn.innerHTML = 'Run Analysis';
-                console.log('All usage reports uploaded successfully.');
-            })
-            .catch(error => {
-                runAnalysisBtn.disabled = false;
-                runAnalysisBtn.innerHTML = 'Run Analysis';
-                alert('One or more usage reports failed to upload. Please try again.');
-                console.error('Error during batch upload of usage reports:', error);
+                runAnalysisBtn.innerHTML = '<i class="fas fa-play"></i> Run Analysis';
+                
+                // Show single summary bubble
+                usageFilesStatus.innerHTML = '';
+                if (successCount > 0) {
+                    const statusDiv = document.createElement('div');
+                    statusDiv.className = 'status-message status-success';
+                    statusDiv.innerHTML = `<i class="fas fa-check-circle"></i> ${successCount} usage report${successCount > 1 ? 's' : ''} loaded successfully`;
+                    usageFilesStatus.appendChild(statusDiv);
+                }
+                
+                if (failCount > 0) {
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'status-message status-error';
+                    errorDiv.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${failCount} file${failCount > 1 ? 's' : ''} failed to upload`;
+                    usageFilesStatus.appendChild(errorDiv);
+                }
+                
+                console.log(`Upload complete: ${successCount} succeeded, ${failCount} failed out of ${totalFiles} total.`);
             });
     });
 
     // Socket.IO Handlers
     socket.on('connect', () => console.log('Socket.IO connection established!'));
-    socket.on('status_update', (data) => statusLabel.textContent = data.message);
+    socket.on('status_update', (data) => {
+        statusLabel.innerHTML = `<i class="fas fa-cog fa-spin"></i> ${data.message}`;
+        statusLabel.style.color = '#888';
+    });
     
     socket.on('analysis_complete', (data) => {
         runAnalysisBtn.disabled = false;
-        runAnalysisBtn.innerHTML = 'Run Analysis';
-        statusLabel.textContent = 'Analysis complete.';
+        runAnalysisBtn.innerHTML = '<i class="fas fa-play"></i> Run Analysis';
+        statusLabel.innerHTML = '<i class="fas fa-check-circle"></i> Analysis complete!';
+        statusLabel.style.color = '#39FF14';
+        
         const { total, categories } = data.dashboard;
-        document.getElementById('total-users').textContent = total;
-        const updateChart = (chart, count, total) => {
-            const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
-            chart.updateSeries([percentage]);
-            chart.updateOptions({ plotOptions: { radialBar: { dataLabels: { value: { formatter: () => count } } } } });
-        };
-        updateChart(powerUserChart, categories.power_user || 0, total);
-        updateChart(consistentUserChart, categories.consistent_user || 0, total);
-        updateChart(coachingChart, categories.coaching || 0, total);
-        updateChart(newUserChart, categories.new_user || 0, total);
-        updateChart(recaptureChart, categories.recapture || 0, total);
+        
+        // Animate the total users counter
+        const totalElement = document.getElementById('total-users');
+        let currentValue = 0;
+        const targetValue = total;
+        const increment = Math.ceil(targetValue / 30);
+        const timer = setInterval(() => {
+            currentValue += increment;
+            if (currentValue >= targetValue) {
+                currentValue = targetValue;
+                clearInterval(timer);
+            }
+            totalElement.textContent = currentValue;
+        }, 30);
+        
+        distributionChart.updateSeries([
+            categories.power_user || 0,
+            categories.consistent_user || 0,
+            categories.coaching || 0,
+            categories.new_user || 0,
+            categories.recapture || 0
+        ]);
+        distributionChart.updateOptions({
+            labels: ['Power Users', 'Consistent Users', 'Coaching Needed', 'New Users', 'License Recapture']
+        });
         
         reportDataForDownload = data.reports;
         reportDataForDownload.excel_bytes = undefined;
         reportsContainer.style.display = 'block';
+        
+        // Add a subtle animation to the reports container
+        reportsContainer.style.opacity = '0';
+        setTimeout(() => {
+            reportsContainer.style.transition = 'opacity 0.5s ease';
+            reportsContainer.style.opacity = '1';
+        }, 100);
     });
 
     socket.on('analysis_error', (data) => {
         runAnalysisBtn.disabled = false;
-        runAnalysisBtn.innerHTML = 'Run Analysis';
-        statusLabel.textContent = `Error: ${data.message}`;
-        alert(`Analysis Error: ${data.message}`);
+        runAnalysisBtn.innerHTML = '<i class="fas fa-play"></i> Run Analysis';
+        statusLabel.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Error: ${data.message}`;
+        statusLabel.style.color = '#ef4444';
+        
+        // Show a more modern error notification instead of alert
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'position-fixed top-0 start-50 translate-middle-x mt-3 alert alert-danger alert-dismissible fade show';
+        errorDiv.style.zIndex = '9999';
+        errorDiv.innerHTML = `
+            <i class="fas fa-exclamation-circle"></i> <strong>Analysis Error:</strong> ${data.message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(errorDiv);
+        setTimeout(() => errorDiv.remove(), 5000);
     });
 
     socket.on('deep_dive_result', (data) => {
@@ -150,26 +314,91 @@ document.addEventListener("DOMContentLoaded", function() {
             deepDiveChart.destroy();
         }
         const chartOptions = {
-            chart: { type: 'line', height: 350, background: '#060606', foreColor: '#ccc' },
+            chart: { 
+                type: 'line', 
+                height: 380, 
+                background: 'transparent', 
+                foreColor: '#888',
+                toolbar: { show: false },
+                animations: {
+                    enabled: true,
+                    easing: 'easeinout',
+                    speed: 800
+                }
+            },
             series: data.chart_data.series,
-            xaxis: { categories: data.chart_data.categories, labels: { style: { colors: '#ccc' } } },
-            yaxis: { title: { text: 'Avg. Tools Used', style: { color: '#ccc' } }, labels: { style: { colors: '#ccc' } } },
-            colors: ['#39FF14', '#00bc8c', '#ff4136'],
-            legend: { labels: { colors: '#ccc' } },
-            grid: { borderColor: '#444' },
-            tooltip: { theme: 'dark' }
+            xaxis: { 
+                categories: data.chart_data.categories, 
+                labels: { 
+                    style: { colors: '#888' },
+                    rotate: -45
+                },
+                axisBorder: { color: '#333' },
+                axisTicks: { color: '#333' }
+            },
+            yaxis: { 
+                title: { 
+                    text: 'Average Tools Used', 
+                    style: { color: '#888', fontSize: '14px' } 
+                }, 
+                labels: { style: { colors: '#888' } },
+                axisBorder: { color: '#333' },
+                axisTicks: { color: '#333' }
+            },
+            colors: ['#39FF14', '#60a5fa', '#ef4444'],
+            stroke: {
+                curve: 'smooth',
+                width: 3
+            },
+            markers: {
+                size: 0,  // Hide markers by default
+                hover: { size: 5 } // Show markers on hover
+            },
+            legend: { 
+                labels: { colors: '#888' },
+                position: 'top',
+                horizontalAlign: 'right'
+            },
+            grid: { 
+                borderColor: '#333',
+                strokeDashArray: 4
+            },
+            tooltip: { 
+                theme: 'dark',
+                x: { format: 'dd MMM yyyy' }
+            }
         };
         deepDiveChart = new ApexCharts(deepDiveChartContainer, chartOptions);
         deepDiveChart.render();
     });
-    socket.on('deep_dive_error', (data) => alert(`Deep Dive Error: ${data.message}`));
+    socket.on('deep_dive_error', (data) => {
+        deepDiveResults.textContent = `Error: ${data.message}`;
+        deepDiveResults.style.color = '#ef4444';
+        
+        // Clear the chart container
+        if (deepDiveChartContainer) {
+            deepDiveChartContainer.innerHTML = '';
+        }
+        
+        // Show error notification
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'position-fixed top-0 start-50 translate-middle-x mt-3 alert alert-danger alert-dismissible fade show';
+        errorDiv.style.zIndex = '9999';
+        errorDiv.innerHTML = `
+            <i class="fas fa-exclamation-circle"></i> <strong>Deep Dive Error:</strong> ${data.message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(errorDiv);
+        setTimeout(() => errorDiv.remove(), 5000);
+    });
 
     // Action Button Listeners
     runAnalysisBtn.addEventListener('click', () => {
         runAnalysisBtn.disabled = true;
-        runAnalysisBtn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Running...`;
+        runAnalysisBtn.innerHTML = `<span class="loading-spinner"></span> Analyzing...`;
         reportsContainer.style.display = 'none';
-        statusLabel.textContent = 'Starting analysis...';
+        statusLabel.innerHTML = '<i class="fas fa-cog fa-spin"></i> Starting analysis...';
+        statusLabel.style.color = 'var(--neon-green)';
         const filters = {
             companies: getSelectedOptions('company-filter'),
             departments: getSelectedOptions('department-filter'),
@@ -193,18 +422,58 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     });
 
-    searchBtn.addEventListener('click', () => {
-        const email = userEmailEntry.value;
-        if (email) {
-            deepDiveResults.textContent = "Searching...";
-            if (deepDiveChart) {
-                deepDiveChart.destroy(); // Clear previous chart if exists
+    // Add click handler with error catching
+    if (searchBtn) {
+        console.log('Adding click handler to search button');
+        searchBtn.onclick = function(e) {
+            e.preventDefault();
+            console.log('Search button clicked!');
+            
+            try {
+                const email = userEmailEntry.value.trim();
+                console.log('Email value:', email);
+                
+                if (email) {
+                    deepDiveResults.textContent = "Searching...";
+                    deepDiveResults.style.color = '#888';
+                    
+                    if (deepDiveChart) {
+                        deepDiveChart.destroy();
+                        deepDiveChartContainer.innerHTML = '<div class="d-flex justify-content-center align-items-center h-100"><span class="loading-spinner"></span></div>';
+                    }
+                    
+                    console.log('Emitting deep dive request for:', email);
+                    socket.emit('perform_deep_dive', { email: email });
+                } else {
+                    console.log('No email entered');
+                    // Show modern error notification
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'position-fixed top-0 start-50 translate-middle-x mt-3 alert alert-warning alert-dismissible fade show';
+                    errorDiv.style.zIndex = '9999';
+                    errorDiv.innerHTML = `
+                        <i class="fas fa-exclamation-triangle"></i> Please enter an email address to search.
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `;
+                    document.body.appendChild(errorDiv);
+                    setTimeout(() => errorDiv.remove(), 3000);
+                }
+            } catch (error) {
+                console.error('Error in search button handler:', error);
             }
-            socket.emit('perform_deep_dive', { email });
-        } else {
-            alert('Please enter an email to search.');
-        }
-    });
+        };
+    } else {
+        console.error('Search button not found!');
+    }
+    
+    // Also add Enter key support for the email input
+    if (userEmailEntry) {
+        userEmailEntry.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                searchBtn.click();
+            }
+        });
+    }
 
     // Helper Functions
     function populateSelect(selectId, options) {
