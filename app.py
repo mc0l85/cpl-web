@@ -7,7 +7,7 @@ import pandas as pd
 import base64
 import io
 # removed unused matplotlib import
-from analysis_logic import AnalysisRunner
+from analysis_logic import CopilotAnalyzer
 import traceback
 
 async_mode = "eventlet"
@@ -133,7 +133,7 @@ def handle_analysis_request(data):
 
     target_file = session.get('file_paths', {}).get('target')
         
-    runner = AnalysisRunner(socketio, request.sid)
+    runner = CopilotAnalyzer(socketio, request.sid)
     socketio.start_background_task(run_analysis_and_emit, runner, analysis_target_files, target_file, data['filters'], request.sid, user_id)
 
 def run_analysis_and_emit(runner, usage_file_paths, target_file_path, filters, sid, user_id):

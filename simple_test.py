@@ -2,7 +2,7 @@
 import pandas as pd
 import pytest
 import os
-from analysis_logic import AnalysisRunner
+from analysis_logic import CopilotAnalyzer
 from unittest.mock import Mock
 
 # Define dummy CSV data for testing
@@ -56,7 +56,7 @@ def test_analysis_logic_with_filters(setup_dummy_files):
         'companies': ['CompanyA']  # Filter by CompanyA
     }
 
-    runner = AnalysisRunner(Mock(), Mock())
+    runner = CopilotAnalyzer(Mock(), Mock())
     runner.update_status = Mock() # Mock the update_status method
 
     results = runner.execute_analysis(usage_files, target_file, filters)
@@ -79,7 +79,7 @@ def test_usage_complexity_over_time(setup_dummy_files):
 
     filters = {} # No filters for this test, so all users are target
 
-    runner = AnalysisRunner(Mock(), Mock())
+    runner = CopilotAnalyzer(Mock(), Mock())
     runner.update_status = Mock() # Mock the update_status method
     
     # Run execute_analysis to populate full_usage_data and utilized_metrics_df

@@ -1,6 +1,6 @@
 import pandas as pd
 import io
-from analysis_logic import AnalysisRunner
+from analysis_logic import CopilotAnalyzer
 from unittest.mock import Mock
 import openpyxl
 
@@ -35,7 +35,7 @@ usage_files = {
 target_file = "/tmp/target_data.csv"
 
 # Run the analysis
-runner = AnalysisRunner(Mock(), Mock())
+runner = CopilotAnalyzer(Mock(), Mock())
 runner.update_status = Mock()  # Mock the update_status method
 
 filters = {}  # No filters for this test

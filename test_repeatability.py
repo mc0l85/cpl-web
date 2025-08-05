@@ -5,7 +5,7 @@ import os
 import sys
 import hashlib
 import json
-from analysis_logic import AnalysisRunner
+from analysis_logic import CopilotAnalyzer
 
 def get_results_hash(results):
     """Generate a hash of the results for comparison"""
@@ -44,7 +44,7 @@ def main():
     # Run analysis 5 times
     for i in range(5):
         print(f"\nRun {i+1}...")
-        runner = AnalysisRunner(None, None)
+        runner = CopilotAnalyzer(None, None)
         
         # Mock the update_status method
         runner.update_status = lambda msg: None
