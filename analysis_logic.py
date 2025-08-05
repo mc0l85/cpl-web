@@ -555,7 +555,6 @@ class AnalysisRunner:
                     
                     # Position legend at the bottom
                     chart.legend.position = 'b'
-                    chart.legend.textProperties.spcPts = 15  # Add space between labels
 
                     # Get data range - only include actual data rows
                     num_data_rows = len(clean_trend_df)
@@ -569,8 +568,8 @@ class AnalysisRunner:
                         chart.set_categories(categories)
                         
                         # Display numbers on axes
-                        chart.x_axis.delete = False  # Ensure x-axis is visible
-                        chart.y_axis.delete = False  # Ensure y-axis is visible
+                        chart.x_axis.number_format = 'yyyy-mm'
+                        chart.y_axis.number_format = '0'
                         
                         # Set chart size
                         chart.width = 15  # Width in Excel units
