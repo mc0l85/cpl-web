@@ -469,6 +469,9 @@ class AnalysisRunner:
         # Convert month-end timestamp to YYYY-MM format for display
         trend_df['Report Refresh Period'] = trend_df['Report Refresh Date'].dt.strftime('%Y-%m')
         
+        # Reorder columns for chart compatibility: Date, Global, Target, Period
+        trend_df = trend_df[['Report Refresh Date', 'Global Usage Complexity', 'Target Usage Complexity', 'Report Refresh Period']]
+        
         self.update_status("Usage complexity trend calculated.")
         return trend_df
 
@@ -551,19 +554,30 @@ class AnalysisRunner:
                     chart = LineChart()
                     chart.title = "Usage Complexity Over Time"
                     chart.style = 2  # Simpler style
+                    
+                    # Set axis titles with proper formatting
                     chart.x_axis.title = "Period"
                     chart.y_axis.title = "Average Tools Used"
+                    
+                    # Position legend at the bottom instead of overlapping
+                    chart.legend.position = 'b'
 
                     # Get data range - only include actual data rows
                     num_data_rows = len(clean_trend_df)
                     if num_data_rows > 0:
-                        # Data columns: B (Global) and C (Target), starting from row 2
+                        # Data columns: B (Global) and C (Target), starting from row 1 (including headers)
                         data = Reference(trend_ws, min_col=2, min_row=1, max_col=3, max_row=num_data_rows + 1)
-                        # Categories: Column D (Report Refresh Period), starting from row 2
-                        categories = Reference(trend_ws, min_col=4, min_row=2, max_row=num_data_rows + 1)
+                        # Categories: Column A (Report Refresh Date), starting from row 2 (excluding header)
+                        categories = Reference(trend_ws, min_col=1, min_row=2, max_row=num_data_rows + 1)
                         
                         chart.add_data(data, titles_from_data=True)
                         chart.set_categories(categories)
+                        
+                        # Force axis labels to show
+                        chart.x_axis.txPr.textProperties.latin = 'Arial'  # Set font
+                        chart.x_axis.txPr.textProperties.sz = 900  # Font size (9pt)
+                        chart.y_axis.txPr.textProperties.latin = 'Arial'
+                        chart.y_axis.txPr.textProperties.sz = 900
                         
                         # Style the lines
                         if len(chart.series) >= 2:
@@ -575,10 +589,10 @@ class AnalysisRunner:
                             s2.graphicalProperties.line.solidFill = "00B0F0"  # Blue
                             s2.graphicalProperties.line.width = 25000  # 2.5pt
 
-                        # Add the chart to the sheet
-                        trend_ws.add_chart(chart, "A10")  # Position the chart
+                        # Add the chart to the sheet with more space
+                        trend_ws.add_chart(chart, "A15")  # Position lower to avoid overlap
                         
-                        # Auto-fit columns
+                        # Auto-fit columns for better visibility
                         for column in trend_ws.columns:
                             max_length = 0
                             column_letter = column[0].column_letter if column else 'A'
@@ -588,7 +602,7 @@ class AnalysisRunner:
                                         max_length = len(str(cell.value))
                                 except:
                                     pass
-                            adjusted_width = max(10, max_length + 2)
+                            adjusted_width = max(12, max_length + 2)  # Increase minimum width
                             trend_ws.column_dimensions[column_letter].width = adjusted_width
 
                         wrote_any = True
