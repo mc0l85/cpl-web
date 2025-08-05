@@ -544,47 +544,52 @@ class CopilotAnalyzer:
                 clean_trend_df.to_excel(writer, sheet_name=sheet_name, index=False)
                 trend_ws = writer.sheets[sheet_name]
 
-                try:
-                    print("Attempting to create chart...")
-                    # Create a simple, reliable Line Chart
+try:
+                    # Create a professional Line Chart
                     chart = LineChart()
                     chart.title = "Usage Complexity Over Time"
-                    chart.style = 2  # Simple style
+                    chart.style = 2  # Simple, clean style
                     
                     # Set axis titles
-                    chart.x_axis.title = "Period"
+                    chart.x_axis.title = "Period (Month)"
                     chart.y_axis.title = "Average Tools Used"
                     
-                    # Position legend at the bottom
+                    # Position legend at the bottom without overlay
                     chart.legend.position = 'b'
+                    chart.legend.overlay = False
 
                     # Get data range - only include actual data rows
                     num_data_rows = len(clean_trend_df)
                     if num_data_rows > 0:
-                        print(f"Found {num_data_rows} rows for chart")
-                        
                         # Data columns: B (Global) and C (Target), starting from row 1 (including headers)
                         data = Reference(trend_ws, min_col=2, min_row=1, max_col=3, max_row=num_data_rows + 1)
-                        # Categories: Column A (Report Refresh Date), starting from row 2 (excluding header)
-                        categories = Reference(trend_ws, min_col=1, min_row=2, max_row=num_data_rows + 1)
-                        
-                        print(f"Data range: {data}")
-                        print(f"Categories range: {categories}")
+                        # Categories: Column D (Report Refresh Period), starting from row 2 (excluding header)
+                        # Using string categories instead of dates for better Excel compatibility
+                        categories = Reference(trend_ws, min_col=4, min_row=2, max_row=num_data_rows + 1)
                         
                         chart.add_data(data, titles_from_data=True)
                         chart.set_categories(categories)
                         
-                        # Set axis formats
-                        chart.x_axis.number_format = 'yyyy-mm'
-                        chart.y_axis.number_format = '0'
+                        # Set axis formats - x-axis is now text, y-axis is numeric
+                        chart.x_axis.number_format = '@'  # Text format for string categories
+                        chart.y_axis.number_format = '0.0'  # One decimal place for better readability
                         
-                        # Set chart size
-                        chart.width = 15
-                        chart.height = 7.5
+                        # Configure axis properties for better visibility
+                        chart.x_axis.tickLblPos = 'low'  # Position labels below axis
+                        chart.y_axis.tickLblPos = 'nextTo'  # Position labels next to axis
                         
-                        # Add chart to sheet
-                        trend_ws.add_chart(chart, "F2")  # Position to the right of data
-                        print("Chart created and added successfully!")
+                        # Set explicit axis scaling for y-axis
+                        y_min = clean_trend_df[['Global Usage Complexity', 'Target Usage Complexity']].min().min()
+                        y_max = clean_trend_df[['Global Usage Complexity', 'Target Usage Complexity']].max().max()
+                        chart.y_axis.scaling.min = max(0, y_min * 0.9)  # Start from 0 or slightly below min
+                        chart.y_axis.scaling.max = y_max * 1.1  # Go slightly above max
+                        
+                        # Set chart size - larger to accommodate legend and labels
+                        chart.width = 18
+                        chart.height = 10
+                        
+                        # Add chart to sheet - position further right to accommodate legend
+                        trend_ws.add_chart(chart, "G2")  # Position to the right of data
                         
                         # Auto-fit columns for better visibility
                         for column in trend_ws.columns:
