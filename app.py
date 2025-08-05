@@ -24,7 +24,15 @@ def index():
     if 'user_id' not in session:
         session['user_id'] = str(uuid.uuid4())
         session['file_paths'] = {'usage': {}, 'target': None}
-    return render_template('index.html')
+    
+    target_preset = request.args.get('target')
+    pre_selected_managers = []
+    if target_preset == 'qsc':
+        pre_selected_managers = [
+            'Rodrigo Ferraz', 'Sarah Docker', 'Rhea West', 'Alvaro Cantillo'
+        ]
+    
+    return render_template('index.html', pre_selected_managers=pre_selected_managers)
 
 @app.route('/upload', methods=['POST'])
 def handle_upload():

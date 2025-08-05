@@ -160,22 +160,21 @@ document.addEventListener("DOMContentLoaded", function() {
             return response.json();
         })
         .then(data => {
-            if (data.status === 'success') {
-                if (data.type === 'target') {
-                    // For target file, show individual file status
-                    const statusDiv = document.createElement('div');
-                    statusDiv.className = 'status-message status-success';
-                    statusDiv.innerHTML = `<i class="fas fa-check-circle"></i> ${file.name} loaded successfully`;
-                    statusElement.appendChild(statusDiv);
-                    
-                    populateSelect('company-filter', data.filters.companies);
-                    populateSelect('department-filter', data.filters.departments);
-                    populateSelect('location-filter', data.filters.locations);
-                    populateSelect('manager-filter', data.filters.managers);
-                } else if (data.type === 'usage') {
-                    uploadedUsageFiles.push(data.filename);
-                }
-                return data; // Resolve promise
+             if (data.status === 'success') {
+                 if (data.type === 'target') {
+                     // For target file, show individual file status
+                     const statusDiv = document.createElement('div');
+                     statusDiv.className = 'status-message status-success';
+                     statusDiv.innerHTML = `<i class="fas fa-check-circle"></i> ${file.name} loaded successfully`;
+                     statusElement.appendChild(statusDiv);
+                     
+                     populateSelect('company-filter', data.filters.companies);
+                     populateSelect('department-filter', data.filters.departments);
+                     populateSelect('location-filter', data.filters.locations);
+                     populateSelect('manager-filter', data.filters.managers, preSelectedManagers);
+                 } else if (data.type === 'usage') {
+                     uploadedUsageFiles.push(data.filename);
+                 }                return data; // Resolve promise
             } else { throw new Error(data.message || 'File upload failed.'); }
         })
         .catch(error => {
@@ -476,7 +475,7 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     // Helper Functions
-    function populateSelect(selectId, options) {
+    function populateSelect(selectId, options, preSelected = []) {
         const select = document.getElementById(selectId);
         select.innerHTML = '';
         if (options) {
@@ -484,6 +483,9 @@ document.addEventListener("DOMContentLoaded", function() {
                 const option = document.createElement('option');
                 option.value = optionText;
                 option.textContent = optionText;
+                if (preSelected.includes(optionText)) {
+                    option.selected = true;
+                }
                 select.appendChild(option);
             });
         }
