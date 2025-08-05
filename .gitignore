@@ -2,3 +2,8 @@ temp_uploads/
 __pycache__/
 *.xlsx
 *.html
+venv/
+*.pyc
+.venv/
+env/
+.env
