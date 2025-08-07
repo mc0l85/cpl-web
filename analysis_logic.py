@@ -63,7 +63,7 @@ class CopilotAnalyzer:
             return "Consistent User"
         if consistency_metric > 25:
             return "Coaching Opportunity"
-        return "License Recapture"
+        return "Coaching Opportunity"  # Changed default from "License Recapture" to "Coaching Opportunity"
 
     def get_justification(self, row):
         classification = row['Classification']
@@ -152,7 +152,11 @@ class CopilotAnalyzer:
                     report_dates = user_data['Report Refresh Date'].unique()
                     if len(report_dates) > 0: first_activity = pd.to_datetime(report_dates).min()
                 else:
-                    first_activity, last_activity = activity_dates.min(), activity_dates.max()
+                    # Ensure we're getting the absolute maximum date across all tools and reports
+                    all_tool_dates = user_data[copilot_tool_cols].values.flatten()
+                    all_tool_dates = pd.to_datetime(all_tool_dates[pd.notna(all_tool_dates)])
+                    last_activity = all_tool_dates.max() if len(all_tool_dates) > 0 else activity_dates.max() if len(activity_dates) > 0 else pd.NaT
+                    first_activity = activity_dates.min()
                     if pd.notna(adoption_date):
                         first_activity = adoption_date
                     active_months = len(pd.to_datetime(activity_dates).to_period('M').unique())
