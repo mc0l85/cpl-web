@@ -197,7 +197,7 @@ def handle_deep_dive(data):
         text_result += f"--- Detailed Records ---\n"
         for _, row in user_data.sort_values(by="Report Refresh Date", ascending=False).iterrows():
             text_result += f"\nReport Date: {row['Report Refresh Date'].strftime('%Y-%m-%d')}\n"
-            tools_used_in_report = [f"  - {col.replace('Last activity date of ', '').replace(' (UTC)', '')}: {row[col].strftime('%Y-%m-%d')}" for col in tool_cols if pd.notna(row[col])]
+            tools_used_in_report = [f"  - {col.replace('Last activity date of ', '').replace(' (UTC)', '')}" for col in tool_cols if pd.notna(row[col])]
             if tools_used_in_report:
                 text_result += "\n".join(tools_used_in_report) + "\n"
             else:

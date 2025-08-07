@@ -578,7 +578,7 @@ class CopilotAnalyzer:
                         for series in chart.series:
                             series.dLbls = DataLabelList()
                             series.dLbls.showVal = True  # Show the actual values
-                            series.dLbls.position = 'top'  # Position labels above points
+                            series.dLbls.position = 't'  # Position labels at top
                         
                         # Set axis formats - x-axis is now text, y-axis is numeric
                         chart.x_axis.number_format = '@'  # Text format for string categories
