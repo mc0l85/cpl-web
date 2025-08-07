@@ -585,8 +585,25 @@ class CopilotAnalyzer:
                         chart.y_axis.number_format = '0.0'  # One decimal place for better readability
                         
                         # Configure axis properties for better visibility
-                        chart.x_axis.tickLblPos = 'low'  # Position labels below axis
-                        chart.y_axis.tickLblPos = 'nextTo'  # Position labels next to axis
+                        # Remove explicit tick label positioning to use defaults
+                        chart.x_axis.tickLblPos = None  # Use default positioning
+                        chart.y_axis.tickLblPos = None  # Use default positioning
+
+                        # Ensure axes are visible
+                        chart.x_axis.delete = False
+                        chart.y_axis.delete = False
+
+                        # Configure tick marks for better visibility
+                        chart.x_axis.majorTickMark = 'out'  # Show major tick marks outside
+                        chart.x_axis.minorTickMark = 'none'  # No minor ticks
+                        chart.y_axis.majorTickMark = 'out'  # Show major tick marks outside
+                        chart.y_axis.minorTickMark = 'none'  # No minor ticks
+
+                        # Ensure tick labels are shown
+                        if hasattr(chart.x_axis, 'tickLblSkip'):
+                            chart.x_axis.tickLblSkip = 1  # Show every label
+                        if hasattr(chart.x_axis, 'tickMarkSkip'):
+                            chart.x_axis.tickMarkSkip = 1  # Show every tick mark
                         
                         # Set explicit axis scaling for y-axis
                         y_min = clean_trend_df[['Global Usage Complexity', 'Target Usage Complexity']].min().min()
