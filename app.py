@@ -197,7 +197,7 @@ def handle_deep_dive(data):
         text_result += f"--- Detailed Records ---\n"
         for _, row in user_data.sort_values(by="Report Refresh Date", ascending=False).iterrows():
             text_result += f"\nReport Date: {row['Report Refresh Date'].strftime('%Y-%m-%d')}\n"
-            tools_used_in_report = [f"  - {col.replace('Last activity date of ', '').replace(' (UTC)', '')}" for col in tool_cols if pd.notna(row[col])]
+            tools_used_in_report = [f"  - {col.replace('Last activity date of ', '').replace(' (UTC)', '')}: {row[col].strftime('%Y-%m-%d')}" for col in tool_cols if pd.notna(row[col])]
             if tools_used_in_report:
                 text_result += "\n".join(tools_used_in_report) + "\n"
             else:
@@ -213,34 +213,69 @@ def handle_deep_dive(data):
         ]
     }
     try:
-        # User data
-        user_data['complexity_per_report'] = user_data[tool_cols].notna().sum(axis=1)
-        graph_data_user = user_data.groupby('Report Refresh Date')['complexity_per_report'].sum().sort_index()
-        
-        # Filtered group data
-        # If no filters were applied in the main analysis, the sample group is effectively the global group
+        # Calculate actual recent activity for user
+        user_data['recent_activity'] = 0
+        for idx, row in user_data.iterrows():
+            recent_tools = 0
+            report_date = row['Report Refresh Date']
+            for col in tool_cols:
+                if pd.notna(row[col]):
+                    last_activity = row[col]
+                    # Consider tool "recently used" if within 30 days of report
+                    days_since_use = (report_date - last_activity).days
+                    if days_since_use <= 30:  # Tool used in last 30 days
+                        recent_tools += 1
+            user_data.at[idx, 'recent_activity'] = recent_tools
+
+        # Group by report date - use mean to show average activity level
+        graph_data_user = user_data.groupby('Report Refresh Date')['recent_activity'].mean().sort_index()
+
+        # Filtered group data - apply same logic
         if not filters_applied or all(not v for v in filters_applied.values()):
             filtered_group_usage_data = full_usage_data.copy()
         else:
             filtered_user_emails = utilized_metrics_df['Email'].str.lower().tolist()
             filtered_group_usage_data = full_usage_data[full_usage_data['User Principal Name'].isin(filtered_user_emails)].copy()
-        
-        filtered_group_usage_data['complexity_per_report'] = filtered_group_usage_data[tool_cols].notna().sum(axis=1)
-        graph_data_group = filtered_group_usage_data.groupby('Report Refresh Date')['complexity_per_report'].mean().sort_index()
 
-        # Global data
+        # Calculate recent activity for group
+        filtered_group_usage_data['recent_activity'] = 0
+        for idx, row in filtered_group_usage_data.iterrows():
+            recent_tools = 0
+            report_date = row['Report Refresh Date']
+            for col in tool_cols:
+                if pd.notna(row[col]):
+                    last_activity = row[col]
+                    days_since_use = (report_date - last_activity).days
+                    if days_since_use <= 30:
+                        recent_tools += 1
+            filtered_group_usage_data.at[idx, 'recent_activity'] = recent_tools
+
+        graph_data_group = filtered_group_usage_data.groupby('Report Refresh Date')['recent_activity'].mean().sort_index()
+
+        # Global data - apply same logic
         all_usage_data = full_usage_data.copy()
-        all_usage_data['complexity_per_report'] = all_usage_data[tool_cols].notna().sum(axis=1)
-        graph_data_global = all_usage_data.groupby('Report Refresh Date')['complexity_per_report'].mean().sort_index()
+        all_usage_data['recent_activity'] = 0
+        for idx, row in all_usage_data.iterrows():
+            recent_tools = 0
+            report_date = row['Report Refresh Date']
+            for col in tool_cols:
+                if pd.notna(row[col]):
+                    last_activity = row[col]
+                    days_since_use = (report_date - last_activity).days
+                    if days_since_use <= 30:
+                        recent_tools += 1
+            all_usage_data.at[idx, 'recent_activity'] = recent_tools
+
+        graph_data_global = all_usage_data.groupby('Report Refresh Date')['recent_activity'].mean().sort_index()
 
         # Combine all date indexes
         all_dates = sorted(list(set(graph_data_user.index) | set(graph_data_group.index) | set(graph_data_global.index)))
         chart_data['categories'] = [d.strftime('%Y-%m-%d') for d in all_dates]
 
-        # Reindex and fill data
-        chart_data['series'][0]['data'] = graph_data_user.reindex(all_dates, fill_value=0).astype(int).tolist()
-        chart_data['series'][1]['data'] = graph_data_group.reindex(all_dates, fill_value=0).astype(int).tolist()
-        chart_data['series'][2]['data'] = graph_data_global.reindex(all_dates, fill_value=0).astype(int).tolist()
+        # Reindex and fill data - use float for accuracy, not int
+        chart_data['series'][0]['data'] = graph_data_user.reindex(all_dates, fill_value=0).round(2).tolist()
+        chart_data['series'][1]['data'] = graph_data_group.reindex(all_dates, fill_value=0).round(2).tolist()
+        chart_data['series'][2]['data'] = graph_data_global.reindex(all_dates, fill_value=0).round(2).tolist()
 
     except Exception as e:
         print(f"Error generating chart data: {e}")
