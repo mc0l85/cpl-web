@@ -172,6 +172,14 @@ document.addEventListener("DOMContentLoaded", function() {
                      populateSelect('department-filter', data.filters.departments);
                      populateSelect('location-filter', data.filters.locations);
                      populateSelect('manager-filter', data.filters.managers, window.preSelectedManagers);
+
+                     if (window.preSelectedManagers && window.preSelectedManagers.length > 0) {
+                         const statusDiv = document.createElement('div');
+                         statusDiv.className = 'status-message status-success mt-2';
+                         statusDiv.innerHTML = `<i class="fas fa-check-circle"></i> Preset managers selected`;
+                         statusElement.appendChild(statusDiv);
+                         setTimeout(() => statusDiv.remove(), 3000);
+                     }
                  } else if (data.type === 'usage') {
                      uploadedUsageFiles.push(data.filename);
                  }                return data; // Resolve promise
