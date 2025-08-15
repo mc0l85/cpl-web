@@ -171,7 +171,7 @@ document.addEventListener("DOMContentLoaded", function() {
                      populateSelect('company-filter', data.filters.companies);
                      populateSelect('department-filter', data.filters.departments);
                      populateSelect('location-filter', data.filters.locations);
-                     populateSelect('manager-filter', data.filters.managers, preSelectedManagers);
+                     populateSelect('manager-filter', data.filters.managers, window.preSelectedManagers);
                  } else if (data.type === 'usage') {
                      uploadedUsageFiles.push(data.filename);
                  }                return data; // Resolve promise
@@ -521,18 +521,5 @@ document.addEventListener("DOMContentLoaded", function() {
         URL.revokeObjectURL(link.href);
     }
 
-    if (window.preSelectedManagers && window.preSelectedManagers.length > 0) {
-        const managerFilter = document.getElementById('manager-filter');
-        if (managerFilter) {
-            const observer = new MutationObserver(function(mutations) {
-                mutations.forEach(function(mutation) {
-                    if (mutation.addedNodes.length) {
-                        populateSelect('manager-filter', Array.from(managerFilter.options).map(o => o.value), window.preSelectedManagers);
-                        observer.disconnect();
-                    }
-                });
-            });
-            observer.observe(managerFilter, { childList: true });
-        }
-    }
+
 });
