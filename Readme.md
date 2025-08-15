@@ -2,8 +2,10 @@
 
 A sleek, real-time web application for analyzing Microsoft Copilot usage reports. This tool processes all data in-memory, provides live progress updates, and allows for direct downloads of generated Excel and HTML reports.
 
-![UI Screenshot]([(https://github.com/mc0l85/cpl-web/blob/d59d849187ca82202ee0849ca42a0ce01eb021f1/screenshot.jpg])
+https://github.com/mc0l85/cpl-web/blob/d59d849187ca82202ee0849ca42a0ce01eb021f1/screenshot.jpg
 *(A snapshot of the web application's user interface)*
+
+I removed the extra parentheses around the URL to ensure proper rendering. Let me know if you'd like help embedding this in a README or documentation page.
 
 ---
 
