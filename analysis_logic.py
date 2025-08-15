@@ -508,21 +508,20 @@ class CopilotAnalyzer:
     def create_excel_report(self, top_df, under_df, realloc_df, all_df=None, usage_complexity_trend_df=None):
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            cols = ['Global Rank', 'Email', 'Classification', 'Adjusted Consistency (%)', 'Usage Consistency (%)', 'Overall Recency', 'Usage Complexity', 'Avg Tools / Report', 'Adoption Velocity', 'Tool Expansion Rate', 'Days Since License', 'Usage Trend', 'Engagement Score', 'Justification']
+            cols = ['Global Rank', 'Email', 'Classification', 'Adjusted Consistency (%)', 'Overall Recency', 'Usage Complexity', 'Avg Tools / Report', 'Adoption Velocity', 'Tool Expansion Rate', 'Days Since License', 'Usage Trend', 'Engagement Score']
             sheets = {
-                'Leaderboard': pd.concat([top_df, under_df, realloc_df]).sort_values(by="Global Rank") if not (top_df.empty and under_df.empty and realloc_df.empty) else (all_df.sort_values(by="Global Rank") if all_df is not None else pd.DataFrame()),
+                'Leaderboard': all_df.sort_values(by="Global Rank") if all_df is not None and not all_df.empty else pd.DataFrame(),
             }
             if all_df is not None and not all_df.empty:
-                cat_map = {
-                    'Power User': 'Power User',
-                    'Consistent User': 'Consistent User',
-                    'Coaching Opportunity': 'Coaching Opportunity',
-                    'New User': 'New User',
-                    'License Recapture': 'License Recapture'
-                }
-                for cat in cat_map.keys():
-                    subset = all_df[all_df['Classification'].str.startswith(cat)]
-                    sheets[cat_map[cat]] = subset.sort_values(by="Global Rank")
+                # Add No Use tabs based on days of inactivity
+                for days in [30, 45, 60, 90]:
+                    # Calculate users with no activity in the last X days
+                    inactive_users = all_df[
+                        (pd.to_datetime(all_df['Overall Recency']) < (self.reference_date - pd.Timedelta(days=days))) |
+                        pd.isna(all_df['Overall Recency'])
+                    ]
+                    if not inactive_users.empty:
+                        sheets[f'No Use {days}d'] = inactive_users.sort_values(by="Global Rank")
             wrote_any = False
             
             # Create all category sheets first
@@ -561,7 +560,6 @@ class CopilotAnalyzer:
                     # Position legend at the bottom without overlay
                     chart.legend.position = 'b'
                     chart.legend.overlay = False
-
                     # Get data range - only include actual data rows
                     num_data_rows = len(clean_trend_df)
                     if num_data_rows > 0:
@@ -584,17 +582,14 @@ class CopilotAnalyzer:
                         # Remove explicit tick label positioning to use defaults
                         chart.x_axis.tickLblPos = None  # Use default positioning
                         chart.y_axis.tickLblPos = None  # Use default positioning
-
                         # Ensure axes are visible
                         chart.x_axis.delete = False
                         chart.y_axis.delete = False
-
                         # Configure tick marks for better visibility
                         chart.x_axis.majorTickMark = 'out'  # Show major tick marks outside
                         chart.x_axis.minorTickMark = 'none'  # No minor ticks
                         chart.y_axis.majorTickMark = 'out'  # Show major tick marks outside
                         chart.y_axis.minorTickMark = 'none'  # No minor ticks
-
                         # Ensure tick labels are shown
                         if hasattr(chart.x_axis, 'tickLblSkip'):
                             chart.x_axis.tickLblSkip = 1  # Show every label
@@ -636,11 +631,10 @@ class CopilotAnalyzer:
                     wrote_any = True
             
             writer.book.active = 0
-        if not wrote_any:
-            return None
+            if not wrote_any:
+                return None
         output.seek(0)
         return output.getvalue()
-
     def create_leaderboard_html(self, all_users_df):
         if all_users_df is None or all_users_df.empty: return ""
         leaderboard_data = all_users_df.sort_values(by="Global Rank")
@@ -694,7 +688,7 @@ class CopilotAnalyzer:
                                 <div class="grid grid-cols-12 gap-4 px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-white">
                                     <div class="col-span-1">Rank</div>
                                     <div class="col-span-5">User</div>
-                                    <div class="col-span-2 text-center">Consistency</div>
+                                    <div class="col-span-2 text-center">Adjusted Consistency</div>
                                     <div class="col-span-2 text-center">Trend</div>
                                     <div class="col-span-2 text-right">Engagement</div>
                                 </div>
