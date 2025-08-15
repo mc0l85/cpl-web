@@ -167,9 +167,11 @@ class CopilotAnalyzer:
                     if len(report_dates) > 0: first_activity = pd.to_datetime(report_dates).min()
                 else:
                     # Ensure we're getting the absolute maximum date across all tools and reports
-                    all_tool_dates = user_data[copilot_tool_cols].values.flatten()
-                    all_tool_dates = pd.to_datetime(all_tool_dates[pd.notna(all_tool_dates)])
-                    last_activity = all_tool_dates.max() if len(all_tool_dates) > 0 else activity_dates.max() if len(activity_dates) > 0 else pd.NaT
+                    all_tool_dates_raw = user_data[copilot_tool_cols].values.flatten()
+                    all_tool_dates_raw = pd.to_datetime(all_tool_dates_raw[pd.notna(all_tool_dates_raw)])
+                    # Filter out any dates that are in the future relative to the last report
+                    all_tool_dates = all_tool_dates_raw[all_tool_dates_raw <= self.reference_date]
+                    last_activity = all_tool_dates.max() if len(all_tool_dates) > 0 else self.reference_date
                     first_activity = activity_dates.min()
                     if pd.notna(adoption_date):
                         first_activity = adoption_date
