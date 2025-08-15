@@ -62,3 +62,15 @@ pip install pandas numpy matplotlib openpyxl flask flask-socketio eventlet
 ```
 
 Remember to activate the virtual environment (`source venv/bin/activate`) every time you open a new terminal and want to work on this project. To deactivate it, simply run `deactivate`.
+
+---
+
+## 🧪 Testing
+
+This project uses `pytest` for testing. All tests are located in the `tests/` directory.
+
+To run the tests, make sure you have `pytest` installed (`pip install pytest`) and then run the following command from the root of the project:
+
+```bash
+pytest
+```
