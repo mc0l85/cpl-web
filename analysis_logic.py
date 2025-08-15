@@ -103,6 +103,8 @@ class CopilotAnalyzer:
                 usage_df[col] = pd.to_datetime(usage_df[col], errors='coerce', format='mixed')
             self.full_usage_data = usage_df.copy()
             utilized_emails = set(usage_df['User Principal Name'].unique())
+            # Store the original count from usage files
+            original_usage_count = len(utilized_emails)
             if target_user_path:
                 self.update_status("Applying filters...")
                 target_df = pd.read_csv(target_user_path, encoding='utf-8-sig')
@@ -120,8 +122,20 @@ class CopilotAnalyzer:
                     target_df['ManagerLine_lc'] = target_df['ManagerLine'].str.lower().fillna('')
                     managers_lc = [m.strip().lower() for m in filters['managers']]
                     target_df = target_df[target_df['ManagerLine_lc'].apply(lambda s: any(m in s for m in managers_lc))]
+                filtered_emails_before = len(utilized_emails)
                 utilized_emails = utilized_emails.intersection(set(target_df['UserPrincipalName'].str.lower()))
+                filtered_emails_after = len(utilized_emails)
+
+                # Log the filtering impact
+                if filtered_emails_before != filtered_emails_after:
+                    self.update_status(f"Filtered from {filtered_emails_before} to {filtered_emails_after} users based on target file")
             if not utilized_emails: return {'error': "No matching users found to analyze."}
+            # Validation: Log the filtering results
+            if target_user_path:
+                original_count = len(set(usage_df['User Principal Name'].unique()))
+                filtered_count = len(utilized_emails)
+                if original_count > filtered_count * 1.3:  # If more than 30% difference
+                    self.update_status(f"Warning: Large difference in user counts - {original_count} in usage data vs {filtered_count} after filtering")
             self.update_status("2. Calculating user metrics...")
             matched_users_df = usage_df[usage_df['User Principal Name'].isin(utilized_emails)].copy()
             copilot_tool_cols = [col for col in matched_users_df.columns if 'Last activity date of' in col]
@@ -134,7 +148,7 @@ class CopilotAnalyzer:
             for email in utilized_emails:
                 processed += 1
                 if processed % 50 == 0 or processed == total_users:
-                    self.update_status(f"2b. Processing users: {processed} of {total_users}...")
+                    self.update_status(f"2b. Processing users: {processed} of {total_users} (filtered)...")
                 user_data = matched_users_df[matched_users_df['User Principal Name'] == email]
                 user_data_sorted = user_data.sort_values(by='Report Refresh Date')
                 user_data_sorted['Row Recency'] = user_data_sorted[copilot_tool_cols].max(axis=1)
@@ -508,7 +522,7 @@ class CopilotAnalyzer:
     def create_excel_report(self, top_df, under_df, realloc_df, all_df=None, usage_complexity_trend_df=None):
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            cols = ['Global Rank', 'Email', 'Classification', 'Adjusted Consistency (%)', 'Overall Recency', 'Usage Complexity', 'Avg Tools / Report', 'Adoption Velocity', 'Tool Expansion Rate', 'Days Since License', 'Usage Trend', 'Engagement Score']
+            cols = ['Global Rank', 'Email', 'Adjusted Consistency (%)', 'Overall Recency', 'Total Tools Used', 'Avg Tools / Report', 'Adoption Velocity', 'Tool Expansion Rate', 'Days Since License', 'Usage Trend', 'Engagement Score']
             sheets = {
                 'Leaderboard': all_df.sort_values(by="Global Rank") if all_df is not None and not all_df.empty else pd.DataFrame(),
             }
@@ -525,8 +539,16 @@ class CopilotAnalyzer:
             wrote_any = False
             
             # Create all category sheets first
+            # Map internal column names to display names for Excel
+            col_display_map = {
+                'Usage Complexity': 'Total Tools Used'
+            }
             for sheet_name, df in sheets.items():
                 df_local = df.copy()
+                # Rename columns for display
+                for old_name, new_name in col_display_map.items():
+                    if old_name in df_local.columns:
+                        df_local = df_local.rename(columns={old_name: new_name})
                 for c in cols:
                     if c not in df_local.columns:
                         df_local[c] = pd.Series([np.nan]*len(df_local))
@@ -550,7 +572,7 @@ class CopilotAnalyzer:
                 try:
                     # Create a professional Line Chart
                     chart = LineChart()
-                    chart.title = "Usage Complexity Over Time"
+                    chart.title = "Total Tools Used Over Time"
                     chart.style = 2  # Simple, clean style
                     
                     # Set axis titles
