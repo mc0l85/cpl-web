@@ -508,6 +508,21 @@ document.addEventListener("DOMContentLoaded", function() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        URL.revokeObjectURL(link.href);
+         URL.revokeObjectURL(link.href);
+    }
+
+    if (preSelectedManagers && preSelectedManagers.length > 0) {
+        const managerFilter = document.getElementById('manager-filter');
+        if (managerFilter) {
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.addedNodes.length) {
+                        populateSelect('manager-filter', Array.from(managerFilter.options).map(o => o.value), preSelectedManagers);
+                        observer.disconnect();
+                    }
+                });
+            });
+            observer.observe(managerFilter, { childList: true });
+        }
     }
 });
