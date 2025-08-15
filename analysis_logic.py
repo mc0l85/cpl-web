@@ -108,22 +108,26 @@ class CopilotAnalyzer:
             if target_user_path:
                 self.update_status("Applying filters...")
                 target_df = pd.read_csv(target_user_path, encoding='utf-8-sig')
-                target_df['UserPrincipalName'] = target_df['UserPrincipalName'].str.lower()
+                target_df['User Principal Name'] = target_df['User Principal Name'].str.lower()
                 if filters.get('companies'):
                     vals = set([v.lower() for v in filters['companies']])
-                    target_df = target_df[target_df['Company'].str.lower().isin(vals)]
+                    if 'Company' in target_df.columns:
+                        target_df = target_df[target_df['Company'].str.lower().isin(vals)]
                 if filters.get('departments'):
                     vals = set([v.lower() for v in filters['departments']])
-                    target_df = target_df[target_df['Department'].str.lower().isin(vals)]
+                    if 'Department' in target_df.columns:
+                        target_df = target_df[target_df['Department'].str.lower().isin(vals)]
                 if filters.get('locations'):
                     vals = set([v.lower() for v in filters['locations']])
-                    target_df = target_df[target_df['City'].str.lower().isin(vals)]
+                    if 'City' in target_df.columns:
+                        target_df = target_df[target_df['City'].str.lower().isin(vals)]
                 if filters.get('managers'):
-                    target_df['ManagerLine_lc'] = target_df['ManagerLine'].str.lower().fillna('')
-                    managers_lc = [m.strip().lower() for m in filters['managers']]
-                    target_df = target_df[target_df['ManagerLine_lc'].apply(lambda s: any(m in s for m in managers_lc))]
+                    if 'ManagerLine' in target_df.columns:
+                        target_df['ManagerLine_lc'] = target_df['ManagerLine'].str.lower().fillna('')
+                        managers_lc = [m.strip().lower() for m in filters['managers']]
+                        target_df = target_df[target_df['ManagerLine_lc'].apply(lambda s: any(m == part.strip() for part in s.split('->') for m in managers_lc))]
                 filtered_emails_before = len(utilized_emails)
-                utilized_emails = utilized_emails.intersection(set(target_df['UserPrincipalName'].str.lower()))
+                utilized_emails = utilized_emails.intersection(set(target_df['User Principal Name']))
                 filtered_emails_after = len(utilized_emails)
 
                 # Log the filtering impact
@@ -474,14 +478,15 @@ class CopilotAnalyzer:
         
         # Combine into a single DataFrame
         trend_df = pd.concat([global_complexity, target_complexity], axis=1).fillna(0)
-        trend_df.index.name = 'Report Refresh Date'
+        trend_df.index.name = 'Month'
         trend_df.reset_index(inplace=True)
+        trend_df['Month'] = pd.to_datetime(trend_df['Month'])
         
         # Convert month timestamp to YYYY-MM format for display
-        trend_df['Report Refresh Period'] = trend_df['Report Refresh Date'].dt.strftime('%Y-%m')
+        trend_df['Report Refresh Period'] = trend_df['Month'].dt.strftime('%Y-%m')
         
         # Reorder columns for chart compatibility: Date, Global, Target, Period
-        trend_df = trend_df[['Report Refresh Date', 'Global Usage Complexity', 'Target Usage Complexity', 'Report Refresh Period']]
+        trend_df = trend_df[['Month', 'Global Usage Complexity', 'Target Usage Complexity', 'Report Refresh Period']]
         
         # Round values to 2 decimal places for better display
         trend_df['Global Usage Complexity'] = trend_df['Global Usage Complexity'].round(2)
