@@ -372,7 +372,7 @@ class CopilotAnalyzer:
             reallocation_df, under_utilized_df, top_utilizers_df = self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'For Reallocation'], self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'Under-Utilized'], self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'Top Utilizer']
 
             self.update_status("4. Calculating usage complexity over time...")
-            usage_complexity_trend_df = self.calculate_usage_complexity_over_time(utilized_emails)
+            usage_complexity_trend_df = self.calculate_usage_complexity_over_time(matched_users_df)
 
             self.update_status("5. Generating reports in memory...")
             excel_bytes = self.create_excel_report(top_utilizers_df, under_utilized_df, reallocation_df, self.utilized_metrics_df, usage_complexity_trend_df)
@@ -441,13 +441,13 @@ class CopilotAnalyzer:
             return {'error': f"An unexpected error occurred: {str(e)}"}
 
 
-    def calculate_usage_complexity_over_time(self, utilized_emails):
+    def calculate_usage_complexity_over_time(self, filtered_usage_data):
         self.update_status("Calculating usage complexity trend...")
-        if self.full_usage_data is None or self.full_usage_data.empty:
+        if filtered_usage_data is None or filtered_usage_data.empty:
             return pd.DataFrame()
 
         # Ensure 'Report Refresh Date' is datetime
-        df = self.full_usage_data.copy()
+        df = filtered_usage_data.copy()
         df['Report Refresh Date'] = pd.to_datetime(df['Report Refresh Date'], errors='coerce')
         
         # Identify tool columns dynamically
@@ -462,19 +462,13 @@ class CopilotAnalyzer:
         # Create month column for grouping
         df['Month'] = df['Report Refresh Date'].dt.to_period('M').dt.to_timestamp()
         
-        # Calculate average complexity per month for all users
+        # Calculate average complexity per month for all users in the filtered data
         global_monthly = df.groupby('Month')['complexity_per_report'].agg(['mean', 'count'])
         global_complexity = global_monthly['mean'].to_frame(name='Global Usage Complexity')
         
-        # Calculate average complexity per month for target users only
-        target_df = df[df['User Principal Name'].isin(utilized_emails)]
-        if not target_df.empty:
-            target_monthly = target_df.groupby('Month')['complexity_per_report'].agg(['mean', 'count'])
-            target_complexity = target_monthly['mean'].to_frame(name='Target Usage Complexity')
-        else:
-            # If no target users, create empty frame with same index
-            target_complexity = pd.DataFrame(index=global_complexity.index, columns=['Target Usage Complexity'])
-            target_complexity.fillna(0, inplace=True)
+        # For target users, we now use the entire filtered_usage_data as the target group
+        target_monthly = df.groupby('Month')['complexity_per_report'].agg(['mean', 'count'])
+        target_complexity = target_monthly['mean'].to_frame(name='Target Usage Complexity')
         
         # Combine into a single DataFrame
         trend_df = pd.concat([global_complexity, target_complexity], axis=1).fillna(0)
