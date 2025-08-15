@@ -26,10 +26,29 @@ def index():
         session['user_id'] = str(uuid.uuid4())
         session['file_paths'] = {'usage': {}, 'target': None}
     
-    target_preset = request.args.get('target')
-    pre_selected_managers = TARGET_PRESETS.get(target_preset, [])
+    target_preset_key = request.args.get('target')
+    preset_data = TARGET_PRESETS.get(target_preset_key)
     
-    return render_template('index.html', pre_selected_managers=pre_selected_managers)
+    initial_filters = None
+    pre_selected_managers = []
+
+    if preset_data and os.path.exists(preset_data['file_path']):
+        try:
+            df = pd.read_csv(preset_data['file_path'], encoding='utf-8-sig')
+            initial_filters = {
+                'companies': sorted(df['Company'].dropna().unique().tolist()),
+                'departments': sorted(df['Department'].dropna().unique().tolist()),
+                'locations': sorted(df['City'].dropna().unique().tolist())
+            }
+            all_managers = set()
+            for chain in df['ManagerLine'].dropna():
+                all_managers.update([m.strip() for m in chain.split('->')])
+            initial_filters['managers'] = sorted(list(all_managers))
+            pre_selected_managers = preset_data.get('managers', [])
+        except Exception as e:
+            print(f"Error loading preset file: {e}")
+
+    return render_template('index.html', initial_filters=initial_filters, pre_selected_managers=pre_selected_managers)
 
 @app.route('/upload', methods=['POST'])
 def handle_upload():

@@ -78,7 +78,7 @@ def test_specific_user():
                 return "Consistent User"
             if consistency_metric > 25:
                 return "Coaching Opportunity"
-            return "License Recapture"
+            return "License Recapture" if (today - last_seen).days > 90 else "Coaching Opportunity"
     
     analyzer = MockAnalyzer()
     

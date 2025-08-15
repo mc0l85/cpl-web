@@ -1,6 +1,7 @@
 import pytest
 from app import app
 from config import TARGET_PRESETS
+import json
 
 @pytest.fixture
 def client():
@@ -11,20 +12,32 @@ def client():
 def test_index_no_target(client):
     rv = client.get('/')
     assert rv.status_code == 200
-    assert b"pre_selected_managers = []" in rv.data
+    assert b"window.initialFilters = null;" in rv.data
+    assert b"window.preSelectedManagers = [];" in rv.data
 
 def test_index_valid_target(client):
     rv = client.get('/?target=qsc')
     assert rv.status_code == 200
-    expected_managers = TARGET_PRESETS['qsc']
-    # This is a bit tricky to test directly as the managers are passed to the template
-    # and not directly rendered as a string in the response. 
-    # We'd need to parse the HTML or use a more sophisticated testing setup (e.g., Selenium)
-    # For now, we'll assume if the status code is 200, the logic is working.
-    # A more robust test would involve checking the rendered HTML for the presence of these managers.
-    assert b"pre_selected_managers" in rv.data
+    # Check that the initial_filters and pre_selected_managers are correctly passed
+    assert b'window.initialFilters' in rv.data
+    assert b'window.preSelectedManagers' in rv.data
+    
+    # Extract the JSON data from the HTML
+    html = rv.data.decode('utf-8')
+    start_filters = html.find('window.initialFilters = ') + len('window.initialFilters = ')
+    end_filters = html.find(';', start_filters)
+    initial_filters = json.loads(html[start_filters:end_filters])
+
+    start_managers = html.find('window.preSelectedManagers = ') + len('window.preSelectedManagers = ')
+    end_managers = html.find(';', start_managers)
+    pre_selected_managers = json.loads(html[start_managers:end_managers])
+
+    # Assert that the data is correct
+    assert initial_filters['companies'] == ['Contoso']
+    assert pre_selected_managers == TARGET_PRESETS['qsc']['managers']
 
 def test_index_invalid_target(client):
     rv = client.get('/?target=invalid')
     assert rv.status_code == 200
-    assert b"pre_selected_managers = []" in rv.data
+    assert b"window.initialFilters = null;" in rv.data
+    assert b"window.preSelectedManagers = [];" in rv.data

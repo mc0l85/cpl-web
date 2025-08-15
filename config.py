@@ -1,13 +1,8 @@
 GENERATE_DEBUG_FILES = True
 
 TARGET_PRESETS = {
-    'qsc-test': [
-        'Rodrigo Ferraz', 'Sarah Docker', 'Rhea West', 'Alvaro Cantillo'
-    ],
-    'test': [
-        'Rodrigo Ferraz', 'Sarah Docker', 'Rhea West', 'Alvaro Cantillo'
-    ],
-    'commercial': [
-        'Nathalie Gerschtein'
-    ]
+    'qsc': {
+        'file_path': 'presets/qsc_target_users.csv',
+        'managers': ['Rodrigo Ferraz', 'Sarah Docker', 'Rhea West', 'Alvaro Cantillo']
+    }
 }

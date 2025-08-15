@@ -579,7 +579,8 @@
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
     <script src="/static/js/main.js"></script>
     <script>
-        const preSelectedManagers = {{ pre_selected_managers | tojson }};
+        window.initialFilters = {{ initial_filters | tojson }};
+        window.preSelectedManagers = {{ pre_selected_managers | tojson }};
     </script>
     <footer class="mt-5 text-center text-muted small">
         <p>&copy; 2024 Copilot Analytics. All rights reserved.</p>
