@@ -56,15 +56,17 @@ def handle_upload():
         session['file_paths']['target'] = save_path
         session.modified = True
         try:
-            df = pd.read_csv(save_path, encoding='utf-8-sig')
-            required_cols = ['Company', 'Department', 'City', 'ManagerLine']
-            if not all(col in df.columns for col in required_cols):
-                return jsonify({'status': 'error', 'message': f"Target file is missing columns: {required_cols}"}), 400
-            
-            filters = { 'companies': sorted(df['Company'].dropna().unique().tolist()), 'departments': sorted(df['Department'].dropna().unique().tolist()), 'locations': sorted(df['City'].dropna().unique().tolist()) }
+            df = pd.read_csv(save_path, usecols=['Company', 'Department', 'City', 'ManagerLine'], dtype=str, encoding='utf-8-sig')
+            df.fillna('', inplace=True)
+
+            filters = {
+                'companies': sorted(df['Company'].unique().tolist()),
+                'departments': sorted(df['Department'].unique().tolist()),
+                'locations': sorted(df['City'].unique().tolist())
+            }
             all_managers = set()
-            for chain in df['ManagerLine'].dropna():
-                all_managers.update([m.strip() for m in chain.split('->')])
+            for chain in df['ManagerLine']:
+                all_managers.update([m.strip() for m in chain.split('->') if m])
             filters['managers'] = sorted(list(all_managers))
             
             return jsonify({'status': 'success', 'type': 'target', 'filters': filters})

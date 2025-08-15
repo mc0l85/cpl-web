@@ -192,7 +192,17 @@ document.addEventListener("DOMContentLoaded", function() {
     targetUsersFile.addEventListener('change', (e) => {
         if (e.target.files.length > 0) {
             targetFileStatus.innerHTML = '';
-            handleFileUpload(e.target.files[0], 'target', targetFileStatus);
+            const filterSelects = ['company-filter', 'department-filter', 'location-filter', 'manager-filter'];
+            filterSelects.forEach(id => {
+                const select = document.getElementById(id);
+                select.innerHTML = '<option>Loading...</option>';
+                select.disabled = true;
+            });
+            handleFileUpload(e.target.files[0], 'target', targetFileStatus).finally(() => {
+                filterSelects.forEach(id => {
+                    document.getElementById(id).disabled = false;
+                });
+            });
         }
     });
     usageReports.addEventListener('change', (e) => {
