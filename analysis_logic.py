@@ -662,8 +662,8 @@ class CopilotAnalyzer:
                             chart.x_axis.tickMarkSkip = 1  # Show every tick mark
                         
                         # Set explicit axis scaling for y-axis
-                        y_min = clean_trend_df[['Global Usage Complexity', 'Target Usage Complexity']].min().min()
-                        y_max = clean_trend_df[['Global Usage Complexity', 'Target Usage Complexity']].max().max()
+                        y_min = clean_trend_df[['Global Average Tools Used', 'Target Average Tools Used']].min().min()
+                        y_max = clean_trend_df[['Global Average Tools Used', 'Target Average Tools Used']].max().max()
                         chart.y_axis.scaling.min = max(0, y_min * 0.9)  # Start from 0 or slightly below min
                         chart.y_axis.scaling.max = y_max * 1.1  # Go slightly above max
                         
