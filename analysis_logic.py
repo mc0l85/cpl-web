@@ -108,7 +108,7 @@ class CopilotAnalyzer:
             if target_user_path:
                 self.update_status("Applying filters...")
                 target_df = pd.read_csv(target_user_path, encoding='utf-8-sig')
-                target_df['User Principal Name'] = target_df['User Principal Name'].str.lower()
+
                 if filters.get('companies'):
                     vals = set([v.lower() for v in filters['companies']])
                     if 'Company' in target_df.columns:
@@ -127,7 +127,7 @@ class CopilotAnalyzer:
                         managers_lc = [m.strip().lower() for m in filters['managers']]
                         target_df = target_df[target_df['ManagerLine_lc'].apply(lambda s: any(m == part.strip() for part in s.split('->') for m in managers_lc))]
                 filtered_emails_before = len(utilized_emails)
-                utilized_emails = utilized_emails.intersection(set(target_df['User Principal Name']))
+                utilized_emails = utilized_emails.intersection(set(target_df['UserPrincipalName'].str.lower()))
                 filtered_emails_after = len(utilized_emails)
 
                 # Log the filtering impact

@@ -56,7 +56,7 @@ def handle_upload():
         session['file_paths']['target'] = save_path
         session.modified = True
         try:
-            df = pd.read_csv(save_path, usecols=['Company', 'Department', 'City', 'ManagerLine'], dtype=str, encoding='utf-8-sig')
+            df = pd.read_csv(save_path, usecols=['UserPrincipalName', 'Company', 'Department', 'City', 'ManagerLine'], dtype=str, encoding='utf-8-sig')
             df.fillna('', inplace=True)
 
             filters = {
@@ -64,10 +64,18 @@ def handle_upload():
                 'departments': sorted(df['Department'].unique().tolist()),
                 'locations': sorted(df['City'].unique().tolist())
             }
-            all_managers = set()
-            for chain in df['ManagerLine']:
-                all_managers.update([m.strip() for m in chain.split('->') if m])
-            filters['managers'] = sorted(list(all_managers))
+            
+            # Check if a preset was used to determine manager filter behavior
+            target_preset_key = request.args.get('target')
+            if target_preset_key and target_preset_key in TARGET_PRESETS:
+                # If a preset is active, use its managers for the filter dropdown
+                filters['managers'] = TARGET_PRESETS[target_preset_key].get('managers', [])
+            else:
+                # Otherwise, extract all managers from the uploaded file
+                all_managers = set()
+                for chain in df['ManagerLine']:
+                    all_managers.update([m.strip() for m in chain.split('->') if m])
+                filters['managers'] = sorted(list(all_managers))
             
             return jsonify({'status': 'success', 'type': 'target', 'filters': filters})
         except Exception as e:

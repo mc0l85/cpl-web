@@ -27,9 +27,8 @@ def dummy_usage_df():
 
 @pytest.fixture
 def dummy_target_df():
-    # Create a DataFrame with the exact column names expected by the code
     return pd.DataFrame({
-        'User Principal Name': ['user1@example.com', 'user2@example.com', 'user3@example.com', 'user4@example.com'],
+        'UserPrincipalName': ['user1@example.com', 'user2@example.com', 'user3@example.com', 'user4@example.com'],
         'Company': ['CompanyA', 'CompanyB', 'CompanyA', 'CompanyC'],
         'Department': ['DeptX', 'DeptY', 'DeptX', 'DeptZ'],
         'City': ['City1', 'City2', 'City1', 'City3'],
