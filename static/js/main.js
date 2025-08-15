@@ -511,11 +511,18 @@ document.addEventListener("DOMContentLoaded", function() {
         URL.revokeObjectURL(link.href);
     }
 
-    // Initial population of filters if data is available from the server
-    if (window.initialFilters) {
-        populateSelect('company-filter', window.initialFilters.companies);
-        populateSelect('department-filter', window.initialFilters.departments);
-        populateSelect('location-filter', window.initialFilters.locations);
-        populateSelect('manager-filter', window.initialFilters.managers, window.preSelectedManagers);
+    if (window.preSelectedManagers && window.preSelectedManagers.length > 0) {
+        const managerFilter = document.getElementById('manager-filter');
+        if (managerFilter) {
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.addedNodes.length) {
+                        populateSelect('manager-filter', Array.from(managerFilter.options).map(o => o.value), window.preSelectedManagers);
+                        observer.disconnect();
+                    }
+                });
+            });
+            observer.observe(managerFilter, { childList: true });
+        }
     }
 });
