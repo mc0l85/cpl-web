@@ -456,24 +456,35 @@ class CopilotAnalyzer:
             self.update_status("No tool columns found for complexity calculation.")
             return pd.DataFrame()
 
-        # Calculate complexity for each report (number of tools used)
-        df['complexity_per_report'] = df[copilot_tool_cols].notna().sum(axis=1)
-        
+        # Calculate average tools used per report (similar to recent_activity in deep dive)
+        df['avg_tools_per_report_recent'] = 0
+        for idx, row in df.iterrows():
+            recent_tools = 0
+            report_date = row['Report Refresh Date']
+            for col in copilot_tool_cols:
+                if pd.notna(row[col]):
+                    last_activity = row[col]
+                    # Consider tool "recently used" if within 30 days of report
+                    days_since_use = (report_date - last_activity).days
+                    if days_since_use <= 30:  # Tool used in last 30 days
+                        recent_tools += 1
+            df.at[idx, 'avg_tools_per_report_recent'] = recent_tools
+
         # Create month column for grouping
         df['Month'] = df['Report Refresh Date'].dt.to_period('M').dt.to_timestamp()
         
-        # Calculate average complexity per month for all users
-        global_monthly = df.groupby('Month')['complexity_per_report'].agg(['mean', 'count'])
-        global_complexity = global_monthly['mean'].to_frame(name='Global Usage Complexity')
+        # Calculate average tools per month for all users
+        global_monthly = df.groupby('Month')['avg_tools_per_report_recent'].agg(['mean', 'count'])
+        global_complexity = global_monthly['mean'].to_frame(name='Global Average Tools Used')
         
-        # Calculate average complexity per month for target users only
+        # Calculate average tools per month for target users only
         target_df = df[df['User Principal Name'].isin(utilized_emails)]
         if not target_df.empty:
-            target_monthly = target_df.groupby('Month')['complexity_per_report'].agg(['mean', 'count'])
-            target_complexity = target_monthly['mean'].to_frame(name='Target Usage Complexity')
+            target_monthly = target_df.groupby('Month')['avg_tools_per_report_recent'].agg(['mean', 'count'])
+            target_complexity = target_monthly['mean'].to_frame(name='Target Average Tools Used')
         else:
             # If no target users, create empty frame with same index
-            target_complexity = pd.DataFrame(index=global_complexity.index, columns=['Target Usage Complexity'])
+            target_complexity = pd.DataFrame(index=global_complexity.index, columns=['Target Average Tools Used'])
             target_complexity.fillna(0, inplace=True)
         
         # Combine into a single DataFrame
@@ -486,11 +497,11 @@ class CopilotAnalyzer:
         trend_df['Report Refresh Period'] = trend_df['Month'].dt.strftime('%Y-%m')
         
         # Reorder columns for chart compatibility: Date, Global, Target, Period
-        trend_df = trend_df[['Month', 'Global Usage Complexity', 'Target Usage Complexity', 'Report Refresh Period']]
+        trend_df = trend_df[['Month', 'Global Average Tools Used', 'Target Average Tools Used', 'Report Refresh Period']]
         
         # Round values to 2 decimal places for better display
-        trend_df['Global Usage Complexity'] = trend_df['Global Usage Complexity'].round(2)
-        trend_df['Target Usage Complexity'] = trend_df['Target Usage Complexity'].round(2)
+        trend_df['Global Average Tools Used'] = trend_df['Global Average Tools Used'].round(2)
+        trend_df['Target Average Tools Used'] = trend_df['Target Average Tools Used'].round(2)
         
         self.update_status("Usage complexity trend calculated.")
         return trend_df
@@ -604,7 +615,7 @@ class CopilotAnalyzer:
                 try:
                     # Create a professional Line Chart
                     chart = LineChart()
-                    chart.title = "Total Tools Used Over Time"
+                    chart.title = "Average Tools Used Over Time"
                     chart.style = 2  # Simple, clean style
                     
                     # Set axis titles
