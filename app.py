@@ -9,6 +9,7 @@ import io
 # removed unused matplotlib import
 from analysis_logic import CopilotAnalyzer
 import traceback
+from config import TARGET_PRESETS
 
 async_mode = "eventlet"
 
@@ -26,11 +27,7 @@ def index():
         session['file_paths'] = {'usage': {}, 'target': None}
     
     target_preset = request.args.get('target')
-    pre_selected_managers = []
-    if target_preset == 'qsc':
-        pre_selected_managers = [
-            'Rodrigo Ferraz', 'Sarah Docker', 'Rhea West', 'Alvaro Cantillo'
-        ]
+    pre_selected_managers = TARGET_PRESETS.get(target_preset, [])
     
     return render_template('index.html', pre_selected_managers=pre_selected_managers)
 
