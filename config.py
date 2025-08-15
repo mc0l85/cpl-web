@@ -9,6 +9,6 @@ TARGET_PRESETS = {
         'managers': ['Rodrigo Ferraz', 'Sarah Docker', 'Rhea West', 'Alvaro Cantillo']
     },
     'comm': {
-        'managers': ['Rodrigo Ferraz', 'Sarah Docker', 'Rhea West', 'Alvaro Cantillo']
+        'managers': ['Nathalie Gerschtein']
     }
 }
