@@ -557,6 +557,31 @@ class CopilotAnalyzer:
                 df_to_write = df_local[cols] if not df_local.empty else pd.DataFrame(columns=cols)
                 df_to_write.to_excel(writer, sheet_name=sheet_name, index=False, float_format="%.2f")
                 self.style_excel_sheet(writer.sheets[sheet_name], df_to_write)
+
+                # Add disclaimer to Leaderboard
+                if sheet_name == 'Leaderboard':
+                    worksheet = writer.sheets[sheet_name]
+                    
+                    # Insert a new row at row 2, which shifts all data down
+                    worksheet.insert_rows(2)
+                    
+                    # Merge the cells in the new row to span the table width
+                    worksheet.merge_cells(start_row=2, start_column=1, end_row=2, end_column=len(df_to_write.columns))
+                    
+                    # Get the cell for the disclaimer
+                    disclaimer_cell = worksheet.cell(row=2, column=1)
+                    
+                    # Set the disclaimer text
+                    disclaimer_cell.value = "The data on this tab is only used to calculate Leaderboard Rankings, and NOT for licensing determination."
+                    
+                    # Define the styles to match the header
+                    header_fill = PatternFill(start_color="2d3748", end_color="2d3748", fill_type="solid")
+                    header_font = Font(bold=True, color="FFFFFF")
+                    
+                    # Apply the styles to the disclaimer cell
+                    disclaimer_cell.fill = header_fill
+                    disclaimer_cell.font = header_font
+                    disclaimer_cell.alignment = Alignment(horizontal='center', vertical='center')
                 wrote_any = wrote_any or not df_to_write.empty
             
             # Add Usage_Trend sheet at the end
