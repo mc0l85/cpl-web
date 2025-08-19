@@ -2,7 +2,7 @@
 
 <#
 .SYNOPSIS
-    Scans an Azure AD group, builds the full Active Directory management chain for each member, 
+    Scans an Azure AD group, builds the full Active Directory management chain for each member,
     and then prompts the user with a "Save As" dialog to export the data to a CSV file.
 
 .DESCRIPTION
@@ -91,7 +91,7 @@ try {
         Write-Error "Failed to pre-load user data from Active Directory. Please check permissions and connectivity to '$adDomain'. Error: $($_.Exception.Message)"
         exit
     }
-    
+
     # --- Step 1: Connect to Azure AD and get group members ---
     try {
         Write-Host "Testing network connectivity to Azure AD endpoint..."
@@ -122,7 +122,7 @@ try {
             }
             $groupMembers = Get-AzureADGroupMember -ObjectId $group.ObjectId -All $true -ErrorAction Stop
             Write-Host "Successfully retrieved group members." -ForegroundColor Green
-            break 
+            break
         }
         catch {
             Write-Warning "An error occurred while retrieving group members: $($_.Exception.Message)"
@@ -134,7 +134,7 @@ try {
             }
         }
     }
-    
+
     if (-not $groupMembers) {
         Write-Warning "No members were ultimately found in the Azure AD group '$azureAdGroupName' after all attempts."
     }
@@ -143,7 +143,7 @@ try {
         # --- Step 2: Build the user data for export using the in-memory maps ---
         $exportData = [System.Collections.ArrayList]@()
         Write-Host "Building user data using the in-memory map..."
-        
+
         $totalUsers = $groupMembers.Count
         $processedUsers = 0
 
@@ -153,7 +153,7 @@ try {
 
             $upn = $member.UserPrincipalName
             $managerChain = Get-ManagerChainFromMap -UserPrincipalName $upn -UpnToUserMap $upnToUserMap -DnToUserMap $dnToUserMap
-            
+
             # Change: Initialize all variables that will be populated from the map.
             $city = $null
             $company = $null
@@ -164,7 +164,7 @@ try {
                 $company = $adUser.Company
                 $department = $adUser.Department
             }
-    
+
             # Change: Add the new properties to the object being exported.
             $exportData.Add([PSCustomObject]@{
                 UserPrincipalName = $upn
@@ -172,11 +172,12 @@ try {
                 Department        = $department
                 City              = $city
                 ManagerLine       = ($managerChain -join ' -> ')
+                MemberSince       = ''
             }) | Out-Null
         }
-    
+
         Write-Host "Successfully built the user data." -ForegroundColor Green
-    
+
         # --- Step 3: Prompt user with Save As dialog and export data ---
         if ($exportData.Count -gt 0) {
             try {
