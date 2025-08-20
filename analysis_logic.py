@@ -517,7 +517,7 @@ class CopilotAnalyzer:
         else:
             # Only include global data when no filters are applied
             trend_df = global_complexity.copy()
-            trend_df['Target Average Tools Used'] = None
+            trend_df['Target Average Tools Used'] = np.nan
         trend_df.index.name = 'Month'
         trend_df.reset_index(inplace=True)
         trend_df['Month'] = pd.to_datetime(trend_df['Month'])
@@ -528,9 +528,14 @@ class CopilotAnalyzer:
         # Reorder columns for chart compatibility: Date, Global, Target, Period
         trend_df = trend_df[['Month', 'Global Average Tools Used', 'Target Average Tools Used', 'Report Refresh Period']]
         
-        # Round values to 2 decimal places for better display
-        trend_df['Global Average Tools Used'] = trend_df['Global Average Tools Used'].round(2)
-        trend_df['Target Average Tools Used'] = trend_df['Target Average Tools Used'].round(2)
+        try:
+            trend_df['Global Average Tools Used'] = pd.to_numeric(trend_df['Global Average Tools Used'], errors='coerce').fillna(0).round(2)
+            trend_df['Target Average Tools Used'] = pd.to_numeric(trend_df['Target Average Tools Used'], errors='coerce').fillna(0).round(2)
+        except Exception as e:
+            self.update_status(f"Warning: Could not round values - {str(e)}")
+            # Ensure columns are at least numeric
+            trend_df['Global Average Tools Used'] = pd.to_numeric(trend_df['Global Average Tools Used'], errors='coerce').fillna(0)
+            trend_df['Target Average Tools Used'] = pd.to_numeric(trend_df['Target Average Tools Used'], errors='coerce').fillna(0)
         
         self.update_status("Usage complexity trend calculated.")
         return trend_df
