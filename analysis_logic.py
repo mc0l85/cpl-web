@@ -375,11 +375,12 @@ class CopilotAnalyzer:
             usage_complexity_trend_df = self.calculate_usage_complexity_over_time(utilized_emails, filters, target_user_path)
 
             self.update_status("5. Generating reports in memory...")
-self.update_status("5a. Creating Excel report structure...")
-excel_bytes = self.create_excel_report(top_utilizers_df, under_utilized_df, reallocation_df, self.utilized_metrics_df, usage_complexity_trend_df)
-self.update_status("5b. Generating leaderboard HTML...")
-leaderboard_html = self.create_leaderboard_html(self.utilized_metrics_df)
-self.update_status("5c. Finalizing reports...")            debug_files = {}
+            self.update_status("5a. Creating Excel report structure...")
+            excel_bytes = self.create_excel_report(top_utilizers_df, under_utilized_df, reallocation_df, self.utilized_metrics_df, usage_complexity_trend_df)
+            self.update_status("5b. Generating leaderboard HTML...")
+            leaderboard_html = self.create_leaderboard_html(self.utilized_metrics_df)
+            self.update_status("5c. Finalizing reports...")
+            debug_files = {}
             try:
                 debug_root = None
                 if config.GENERATE_DEBUG_FILES:
