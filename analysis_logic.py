@@ -372,12 +372,14 @@ class CopilotAnalyzer:
             reallocation_df, under_utilized_df, top_utilizers_df = self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'For Reallocation'], self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'Under-Utilized'], self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'Top Utilizer']
 
             self.update_status("4. Calculating usage complexity over time...")
-            usage_complexity_trend_df = self.calculate_usage_complexity_over_time(utilized_emails)
+            usage_complexity_trend_df = self.calculate_usage_complexity_over_time(utilized_emails, filters, target_user_path)
 
             self.update_status("5. Generating reports in memory...")
-            excel_bytes = self.create_excel_report(top_utilizers_df, under_utilized_df, reallocation_df, self.utilized_metrics_df, usage_complexity_trend_df)
-            leaderboard_html = self.create_leaderboard_html(self.utilized_metrics_df)
-            debug_files = {}
+self.update_status("5a. Creating Excel report structure...")
+excel_bytes = self.create_excel_report(top_utilizers_df, under_utilized_df, reallocation_df, self.utilized_metrics_df, usage_complexity_trend_df)
+self.update_status("5b. Generating leaderboard HTML...")
+leaderboard_html = self.create_leaderboard_html(self.utilized_metrics_df)
+self.update_status("5c. Finalizing reports...")            debug_files = {}
             try:
                 debug_root = None
                 if config.GENERATE_DEBUG_FILES:
@@ -441,7 +443,7 @@ class CopilotAnalyzer:
             return {'error': f"An unexpected error occurred: {str(e)}"}
 
 
-    def calculate_usage_complexity_over_time(self, utilized_emails):
+    def calculate_usage_complexity_over_time(self, utilized_emails, filters=None, target_user_path=None):
         self.update_status("Calculating usage complexity trend...")
         if self.full_usage_data is None or self.full_usage_data.empty:
             return pd.DataFrame()
@@ -449,6 +451,22 @@ class CopilotAnalyzer:
         # Ensure 'Report Refresh Date' is datetime
         df = self.full_usage_data.copy()
         df['Report Refresh Date'] = pd.to_datetime(df['Report Refresh Date'], errors='coerce')
+        
+        # Determine if any meaningful filters are applied
+        filters_applied = False
+        if filters and target_user_path:
+            # Check if any filter has values selected
+            if (filters.get('companies') or 
+                filters.get('departments') or 
+                filters.get('locations') or 
+                filters.get('managers')):
+                
+                # Additional check: ensure filtered emails are a subset of total emails
+                total_emails = set(self.full_usage_data['User Principal Name'].unique())
+                if len(utilized_emails) < len(total_emails):
+                    filters_applied = True
+
+        self.update_status(f"Calculating usage complexity trend... (Filters applied: {filters_applied})")
         
         # Identify tool columns dynamically
         copilot_tool_cols = [col for col in df.columns if 'Last activity date of' in col]
@@ -478,17 +496,27 @@ class CopilotAnalyzer:
         global_complexity = global_monthly['mean'].to_frame(name='Global Average Tools Used')
         
         # Calculate average tools per month for target users only
-        target_df = df[df['User Principal Name'].isin(utilized_emails)]
-        if not target_df.empty:
-            target_monthly = target_df.groupby('Month')['avg_tools_per_report_recent'].agg(['mean', 'count'])
-            target_complexity = target_monthly['mean'].to_frame(name='Target Average Tools Used')
+        if filters_applied:
+            target_df = df[df['User Principal Name'].isin(utilized_emails)]
+            if not target_df.empty:
+                target_monthly = target_df.groupby('Month')['avg_tools_per_report_recent'].agg(['mean', 'count'])
+                target_complexity = target_monthly['mean'].to_frame(name='Target Average Tools Used')
+            else:
+                # If no target users, create empty frame with same index
+                target_complexity = pd.DataFrame(index=global_complexity.index, columns=['Target Average Tools Used'])
+                target_complexity.fillna(0, inplace=True)
         else:
-            # If no target users, create empty frame with same index
+            # No filters applied - don't create target data
             target_complexity = pd.DataFrame(index=global_complexity.index, columns=['Target Average Tools Used'])
-            target_complexity.fillna(0, inplace=True)
+            target_complexity.fillna(None, inplace=True)
         
         # Combine into a single DataFrame
-        trend_df = pd.concat([global_complexity, target_complexity], axis=1).fillna(0)
+        if filters_applied:
+            trend_df = pd.concat([global_complexity, target_complexity], axis=1).fillna(0)
+        else:
+            # Only include global data when no filters are applied
+            trend_df = global_complexity.copy()
+            trend_df['Target Average Tools Used'] = None
         trend_df.index.name = 'Month'
         trend_df.reset_index(inplace=True)
         trend_df['Month'] = pd.to_datetime(trend_df['Month'])
@@ -540,6 +568,7 @@ class CopilotAnalyzer:
     def create_excel_report(self, top_df, under_df, realloc_df, all_df=None, usage_complexity_trend_df=None):
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            self.update_status("5a1. Setting up Excel workbook...")
             cols = ['Global Rank', 'Email', 'Adjusted Consistency (%)', 'Overall Recency', 'Total Tools Used', 'Avg Tools / Report', 'Adoption Velocity', 'Tool Expansion Rate', 'Days Since License', 'Usage Trend', 'Engagement Score']
             sheets = {
                 'Leaderboard': all_df.sort_values(by="Global Rank") if all_df is not None and not all_df.empty else pd.DataFrame(),
@@ -599,6 +628,7 @@ class CopilotAnalyzer:
                     disclaimer_cell.font = header_font
                     disclaimer_cell.alignment = Alignment(horizontal='center', vertical='center')
                 wrote_any = wrote_any or not df_to_write.empty
+            self.update_status("5a2. Writing data sheets...")
             
             # Add Usage_Trend sheet at the end
             if usage_complexity_trend_df is not None and not usage_complexity_trend_df.empty:
@@ -613,6 +643,7 @@ class CopilotAnalyzer:
                 trend_ws = writer.sheets[sheet_name]
 
                 try:
+                    self.update_status("5a3. Creating usage trend chart...")
                     # Create a professional Line Chart
                     chart = LineChart()
                     chart.title = "Average Tools Used Over Time"
@@ -628,12 +659,21 @@ class CopilotAnalyzer:
                     # Get data range - only include actual data rows
                     num_data_rows = len(clean_trend_df)
                     if num_data_rows > 0:
+                        self.update_status("5a3a. Configuring chart properties...")
                         # Data columns: B (Global) and C (Target), starting from row 1 (including headers)
-                        data = Reference(trend_ws, min_col=2, min_row=1, max_col=3, max_row=num_data_rows + 1)
+                        has_target_data = not clean_trend_df['Target Average Tools Used'].isna().all()
+
+                        if has_target_data:
+                            # Data columns: B (Global) and C (Target), starting from row 1 (including headers)
+                            data = Reference(trend_ws, min_col=2, min_row=1, max_col=3, max_row=num_data_rows + 1)
+                        else:
+                            # Only Global data: column B only
+                            data = Reference(trend_ws, min_col=2, min_row=1, max_col=2, max_row=num_data_rows + 1)
                         # Categories: Column D (Report Refresh Period), starting from row 2 (excluding header)
                         # Using string categories instead of dates for better Excel compatibility
                         categories = Reference(trend_ws, min_col=4, min_row=2, max_row=num_data_rows + 1)
                         
+                        self.update_status("5a3b. Adding chart data...")
                         chart.add_data(data, titles_from_data=True)
                         chart.set_categories(categories)
                         
@@ -662,8 +702,12 @@ class CopilotAnalyzer:
                             chart.x_axis.tickMarkSkip = 1  # Show every tick mark
                         
                         # Set explicit axis scaling for y-axis
-                        y_min = clean_trend_df[['Global Average Tools Used', 'Target Average Tools Used']].min().min()
-                        y_max = clean_trend_df[['Global Average Tools Used', 'Target Average Tools Used']].max().max()
+                        if has_target_data:
+                            y_min = clean_trend_df[['Global Average Tools Used', 'Target Average Tools Used']].min().min()
+                            y_max = clean_trend_df[['Global Average Tools Used', 'Target Average Tools Used']].max().max()
+                        else:
+                            y_min = clean_trend_df['Global Average Tools Used'].min()
+                            y_max = clean_trend_df['Global Average Tools Used'].max()
                         chart.y_axis.scaling.min = max(0, y_min * 0.9)  # Start from 0 or slightly below min
                         chart.y_axis.scaling.max = y_max * 1.1  # Go slightly above max
                         
@@ -671,6 +715,7 @@ class CopilotAnalyzer:
                         chart.width = 18
                         chart.height = 10
                         
+                        self.update_status("5a3c. Positioning chart in worksheet...")
                         # Add chart to sheet - position further right to accommodate legend
                         trend_ws.add_chart(chart, "G2")  # Position to the right of data
                         
@@ -694,6 +739,7 @@ class CopilotAnalyzer:
                     traceback.print_exc()
                     # If chart fails, still mark as wrote_any since data was written
                     wrote_any = True
+            self.update_status("5a4. Finalizing Excel formatting...")
             
             writer.book.active = 0
             if not wrote_any:
