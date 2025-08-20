@@ -509,7 +509,7 @@ class CopilotAnalyzer:
         else:
             # No filters applied - don't create target data
             target_complexity = pd.DataFrame(index=global_complexity.index, columns=['Target Average Tools Used'])
-            target_complexity.fillna(None, inplace=True)
+
         
         # Combine into a single DataFrame
         if filters_applied:
