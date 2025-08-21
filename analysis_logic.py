@@ -584,8 +584,11 @@ class CopilotAnalyzer:
                 for days in [30, 45, 60, 90]:
                     # Calculate users with no activity in the last X days
                     inactive_users = all_df[
-                        (pd.to_datetime(all_df['Overall Recency']) < (self.reference_date - pd.Timedelta(days=days))) |
-                        pd.isna(all_df['Overall Recency'])
+                        (
+                            (pd.to_datetime(all_df['Overall Recency']) < (self.reference_date - pd.Timedelta(days=days))) |
+                            pd.isna(all_df['Overall Recency'])
+                        ) &
+                        (pd.to_numeric(all_df['Days Since License'], errors='coerce').fillna(0) >= 90)
                     ]
                     if not inactive_users.empty:
                         sheets[f'No Use {days}d'] = inactive_users.sort_values(by="Global Rank")
