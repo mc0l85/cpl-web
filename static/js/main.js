@@ -1,5 +1,95 @@
-document.addEventListener("DOMContentLoaded", function() {
+class ChartManager {
+    constructor() {
+        this.charts = new Map();
+    }
+    
+    createChart(id, options) {
+        this.destroyChart(id); // Clean up existing chart
+        const chart = new ApexCharts(document.querySelector(id), options);
+        chart.render();
+        this.charts.set(id, chart);
+        return chart;
+    }
+    
+    destroyChart(id) {
+        const chart = this.charts.get(id);
+        if (chart) {
+            chart.destroy();
+            this.charts.delete(id);
+        }
+    }
+    
+    destroyAll() {
+        for (const [id, chart] of this.charts) {
+            chart.destroy();
+        }
+        this.charts.clear();
+    }
+}
+
+window.addEventListener('beforeunload', () => {
+    if (window.chartManager) {
+        window.chartManager.destroyAll();
+    }
+});
+
+class ErrorBoundary {
+    static initialize() {
+        window.addEventListener('error', this.handleError);
+        window.addEventListener('unhandledrejection', this.handlePromiseRejection);
+    }
+    
+    static handleError(event) {
+        console.error('Global error:', event.error);
+        this.showRecoveryOptions('An unexpected error occurred.');
+    }
+    
+    static handlePromiseRejection(event) {
+        console.error('Unhandled promise rejection:', event.reason);
+        this.showRecoveryOptions('A network or processing error occurred.');
+    }
+    
+    static showRecoveryOptions(message) {
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'position-fixed top-0 start-50 translate-middle-x mt-3 alert alert-danger alert-dismissible fade show';
+        errorDiv.style.zIndex = '9999';
+        errorDiv.innerHTML = `
+            <i class="fas fa-exclamation-triangle"></i> 
+            <strong>Error:</strong> ${message}
+            <div class="mt-2">
+                <button class="btn btn-sm btn-outline-light me-2" onclick="location.reload()">
+                    <i class="fas fa-refresh"></i> Refresh Page
+                </button>
+                <button class="btn btn-sm btn-outline-light" onclick="this.closest('.alert').remove()">
+                    <i class="fas fa-times"></i> Dismiss
+                </button>
+            </div>
+        `;
+        document.body.appendChild(errorDiv);
+    }
+}
+
+ErrorBoundary.initialize();
+
+class PerformanceMonitor {
+    static trackOperation(name, operation) {
+        const start = performance.now();
+        
+        return Promise.resolve(operation()).finally(() => {
+            const duration = performance.now() - start;
+            console.log(`Operation ${name} took ${duration.toFixed(2)}ms`);
+            
+            if (duration > 5000) {
+                console.warn(`Slow operation detected: ${name} (${duration.toFixed(2)}ms)`);
+            }
+        });
+    }
+}
+
+function initializeApp() {
+    document.addEventListener("DOMContentLoaded", function() {
     const socket = io();
+    const connectionManager = new ConnectionManager(socket);
     
     let uploadedUsageFiles = [];
     let reportDataForDownload = null;
@@ -19,6 +109,8 @@ document.addEventListener("DOMContentLoaded", function() {
     const deepDiveChartContainer = document.getElementById('deep-dive-chart-container');
     let deepDiveChart = null;
     
+    const uploadManager = new UploadManager();
+
     // Debug: Check if elements exist
     console.log('Search button found:', searchBtn);
     console.log('Email entry found:', userEmailEntry);
@@ -147,18 +239,11 @@ document.addEventListener("DOMContentLoaded", function() {
         chart.render();
         return chart;
     }
-    const distributionChart = createDistributionChart("#distribution-chart");
+    const distributionChart = chartManager.createChart("#distribution-chart", options);
 
     // File Handling with modern UI feedback
     const handleFileUpload = (file, type, statusElement) => {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('file_type', type);
-        return fetch('/upload', { method: 'POST', body: formData })
-        .then(response => {
-            if (!response.ok) { return response.json().then(err => { throw new Error(err.message || 'Network response was not ok.') }); }
-            return response.json();
-        })
+        return uploadManager.queueUpload(file, type, statusElement)
         .then(data => {
              if (data.status === 'success') {
                  if (data.type === 'target') {
@@ -314,21 +399,13 @@ document.addEventListener("DOMContentLoaded", function() {
         statusLabel.style.color = '#ef4444';
         
         // Show a more modern error notification instead of alert
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'position-fixed top-0 start-50 translate-middle-x mt-3 alert alert-danger alert-dismissible fade show';
-        errorDiv.style.zIndex = '9999';
-        errorDiv.innerHTML = `
-            <i class="fas fa-exclamation-circle"></i> <strong>Analysis Error:</strong> ${data.message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-        document.body.appendChild(errorDiv);
-        setTimeout(() => errorDiv.remove(), 5000);
+        showErrorNotification(`Analysis Error: ${data.message}`);
     });
 
     socket.on('deep_dive_result', (data) => {
         deepDiveResults.textContent = data.text;
         if (deepDiveChart) {
-            deepDiveChart.destroy();
+            chartManager.destroyChart("deep-dive-chart-container");
         }
         const chartOptions = {
             chart: { 
@@ -385,8 +462,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 x: { format: 'dd MMM yyyy' }
             }
         };
-        deepDiveChart = new ApexCharts(deepDiveChartContainer, chartOptions);
-        deepDiveChart.render();
+        deepDiveChart = chartManager.createChart("deep-dive-chart-container", chartOptions);
     });
     socket.on('deep_dive_error', (data) => {
         deepDiveResults.textContent = `Error: ${data.message}`;
@@ -398,19 +474,11 @@ document.addEventListener("DOMContentLoaded", function() {
         }
         
         // Show error notification
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'position-fixed top-0 start-50 translate-middle-x mt-3 alert alert-danger alert-dismissible fade show';
-        errorDiv.style.zIndex = '9999';
-        errorDiv.innerHTML = `
-            <i class="fas fa-exclamation-circle"></i> <strong>Deep Dive Error:</strong> ${data.message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-        document.body.appendChild(errorDiv);
-        setTimeout(() => errorDiv.remove(), 5000);
+        showErrorNotification(`Deep Dive Error: ${data.message}`);
     });
 
     // Action Button Listeners
-    runAnalysisBtn.addEventListener('click', () => {
+    runAnalysisBtn.addEventListener('click', async () => {
         runAnalysisBtn.disabled = true;
         runAnalysisBtn.innerHTML = `<span class="loading-spinner"></span> Analyzing...`;
         reportsContainer.style.display = 'none';
@@ -422,10 +490,21 @@ document.addEventListener("DOMContentLoaded", function() {
             locations: getSelectedOptions('location-filter'),
             managers: getSelectedOptions('manager-filter'),
         };
-        socket.emit('start_analysis', { 
-            filters: filters,
-            usage_filenames: uploadedUsageFiles 
-        });
+        try {
+            await PerformanceMonitor.trackOperation('start_analysis', async () => {
+                await RetryManager.withRetry(async () => {
+                    socket.emit('start_analysis', { 
+                        filters: filters,
+                        usage_filenames: uploadedUsageFiles 
+                    });
+                });
+            });
+        } catch (error) {
+            // This error will be caught by the socket.on('analysis_error') handler
+            // or the global error boundary if it's a critical failure before emit
+            console.error('Analysis initiation failed:', error);
+            showErrorNotification('Analysis failed after multiple attempts. Please refresh and try again.');
+        }
     });
     
     downloadBtn.addEventListener('click', () => {
@@ -455,24 +534,17 @@ document.addEventListener("DOMContentLoaded", function() {
                     deepDiveResults.style.color = '#888';
                     
                     if (deepDiveChart) {
-                        deepDiveChart.destroy();
+                        chartManager.destroyChart("deep-dive-chart-container");
                         deepDiveChartContainer.innerHTML = '<div class="d-flex justify-content-center align-items-center h-100"><span class="loading-spinner"></span></div>';
                     }
                     
                     console.log('Emitting deep dive request for:', email);
-                    socket.emit('perform_deep_dive', { email: email });
+                    PerformanceMonitor.trackOperation('perform_deep_dive', async () => {
+                        socket.emit('perform_deep_dive', { email: email });
+                    });
                 } else {
                     console.log('No email entered');
-                    // Show modern error notification
-                    const errorDiv = document.createElement('div');
-                    errorDiv.className = 'position-fixed top-0 start-50 translate-middle-x mt-3 alert alert-warning alert-dismissible fade show';
-                    errorDiv.style.zIndex = '9999';
-                    errorDiv.innerHTML = `
-                        <i class="fas fa-exclamation-triangle"></i> Please enter an email address to search.
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    `;
-                    document.body.appendChild(errorDiv);
-                    setTimeout(() => errorDiv.remove(), 3000);
+                    showWarningNotification('Please enter an email address to search.');
                 }
             } catch (error) {
                 console.error('Error in search button handler:', error);
@@ -482,6 +554,30 @@ document.addEventListener("DOMContentLoaded", function() {
         console.error('Search button not found!');
     }
     
+    function showErrorNotification(message) {
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'position-fixed top-0 start-50 translate-middle-x mt-3 alert alert-danger alert-dismissible fade show';
+        errorDiv.style.zIndex = '9999';
+        errorDiv.innerHTML = `
+            <i class="fas fa-exclamation-circle"></i> <strong>Error:</strong> ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(errorDiv);
+        setTimeout(() => errorDiv.remove(), 5000);
+    }
+
+    function showWarningNotification(message) {
+        const warningDiv = document.createElement('div');
+        warningDiv.className = 'position-fixed top-0 start-50 translate-middle-x mt-3 alert alert-warning alert-dismissible fade show';
+        warningDiv.style.zIndex = '9999';
+        warningDiv.innerHTML = `
+            <i class="fas fa-exclamation-triangle"></i> ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(warningDiv);
+        setTimeout(() => warningDiv.remove(), 3000);
+    }
+
     // Also add Enter key support for the email input
     if (userEmailEntry) {
         userEmailEntry.addEventListener('keypress', function(e) {
@@ -530,4 +626,102 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
 
+class ConnectionManager {
+    constructor(socket) {
+        this.socket = socket;
+        this.reconnectAttempts = 0;
+        this.maxReconnectAttempts = 5;
+        this.setupConnectionHandlers();
+    }
+    
+    setupConnectionHandlers() {
+        this.socket.on('connect', () => {
+            console.log('Connected to server');
+            this.reconnectAttempts = 0;
+            this.showConnectionStatus('connected');
+        });
+        
+        this.socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+            this.showConnectionStatus('disconnected');
+            this.attemptReconnect();
+        });
+        
+        this.socket.on('connect_error', (error) => {
+            console.error('Connection error:', error);
+            this.showConnectionStatus('error');
+        });
+    }
+    
+    attemptReconnect() {
+        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+            this.reconnectAttempts++;
+            setTimeout(() => {
+                console.log(`Reconnection attempt ${this.reconnectAttempts}`);
+                this.socket.connect();
+            }, Math.pow(2, this.reconnectAttempts) * 1000);
+        }
+    }
+    
+    showConnectionStatus(status) {
+        // Update UI to show connection status
+        const statusElement = document.getElementById('connection-status');
+        if (statusElement) {
+            statusElement.className = `connection-status ${status}`;
+            statusElement.textContent = status === 'connected' ? 'Connected' : 
+                                      status === 'disconnected' ? 'Reconnecting...' : 'Connection Error';
+        }
+    }
+}
+
+class UploadManager {
+    constructor() {
+        this.uploadQueue = [];
+        this.isUploading = false;
+        this.uploadedFiles = new Map();
+    }
+    
+    async queueUpload(file, type, statusElement) {
+        return new Promise((resolve, reject) => {
+            this.uploadQueue.push({ file, type, statusElement, resolve, reject });
+            this.processQueue();
+        });
+    }
+    
+    async processQueue() {
+        if (this.isUploading || this.uploadQueue.length === 0) return;
+        
+        this.isUploading = true;
+        const upload = this.uploadQueue.shift();
+        
+        try {
+            const result = await this.performUpload(upload);
+            upload.resolve(result);
+        } catch (error) {
+            upload.reject(error);
+        } finally {
+            this.isUploading = false;
+            this.processQueue();
+        }
+    }
+    
+    async performUpload(upload) {
+        const { file, type, statusElement } = upload;
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('file_type', type);
+        
+        const response = await fetch('/upload', {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Upload failed');
+        }
+        
+        return await response.json();
+    }
+}
 });

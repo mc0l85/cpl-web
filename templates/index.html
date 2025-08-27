@@ -474,6 +474,7 @@
                                 <i class="fas fa-play"></i> Run Analysis
                             </button>
                             <div id="status-label" class="text-center text-muted"></div>
+<div id="connection-status" class="text-center text-muted mt-2"></div>
                             <div id="reports-container" style="display: none;">
                                 <button id="download-btn" class="btn btn-outline-light btn-lg">
                                     <i class="fas fa-download"></i> Download Reports
@@ -574,11 +575,67 @@
             </div>
         </div>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
     <script src="/static/js/main.js"></script>
+    <script src="/static/js/socket.io.min.js"></script>
+    <script src="/static/js/apexcharts.min.js"></script>
     <script>
+        // CDN fallback loader
+        function loadFallback(src, fallbackSrc, callback) {
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = callback;
+            script.onerror = () => {
+                console.warn(`Failed to load ${src}, trying fallback`);
+                const fallbackScript = document.createElement('script');
+                fallbackScript.src = fallbackSrc;
+                fallbackScript.onload = callback;
+                fallbackScript.onerror = () => {
+                    console.error(`Failed to load both ${src} and ${fallbackSrc}`);
+                    showCriticalError('Failed to load required resources. Please refresh the page.');
+                };
+                document.head.appendChild(fallbackScript);
+            };
+            document.head.appendChild(script);
+        }
+
+        // Load critical resources with fallbacks
+        loadFallback(
+            'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js',
+            '/static/js/bootstrap.bundle.min.js',
+            () => {
+                loadFallback(
+                    'https://cdn.socket.io/4.7.5/socket.io.min.js',
+                    '/static/js/socket.io.min.js',
+                    () => {
+                        loadFallback(
+                            'https://cdn.jsdelivr.net/npm/apexcharts',
+                            '/static/js/apexcharts.min.js',
+                            initializeApp
+                        );
+                    }
+                );
+            }
+        );
+
+        function initializeApp() {
+            // Your existing main.js content will go here, wrapped in this function
+            // This ensures all CDNs are loaded before the app initializes
+            // For now, we'll just call the main.js content directly
+            // The actual content of main.js will be moved into this function in the next step
+            console.log("All critical resources loaded. Initializing app.");
+            // Original main.js content will be placed here
+        }
+
+        function showCriticalError(message) {
+            document.body.innerHTML = `
+                <div class="alert alert-danger m-4">
+                    <h4>Loading Error</h4>
+                    <p>${message}</p>
+                    <button onclick="location.reload()" class="btn btn-primary">Refresh Page</button>
+                </div>
+            `;
+        }
+
         window.preSelectedManagers = {{ pre_selected_managers | tojson }};
     </script>
     <footer class="mt-5 text-center text-muted small">

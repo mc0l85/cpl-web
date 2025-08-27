@@ -23,7 +23,8 @@ socketio = SocketIO(app, async_mode=async_mode)
 @app.route('/')
 def index():
     if 'user_id' not in session:
-        session['user_id'] = str(uuid.uuid4())
+                session['user_id'] = str(uuid.uuid4())
+        session.permanent = True
         session['file_paths'] = {'usage': {}, 'target': None}
     
     target_preset_key = request.args.get('target')
@@ -86,6 +87,30 @@ def handle_upload():
         session['file_paths']['usage'][file.filename] = save_path
         session.modified = True
         return jsonify({'status': 'success', 'type': 'usage', 'filename': file.filename})
+
+from werkzeug.exceptions import RequestTimeout
+
+@app.errorhandler(500)
+def handle_internal_error(error):
+    return jsonify({
+        'status': 'error',
+        'message': 'Internal server error. Please try again.',
+        'error_id': str(uuid.uuid4())[:8]
+    }), 500
+
+@app.errorhandler(404)
+def handle_not_found(error):
+    return jsonify({
+        'status': 'error',
+        'message': 'Resource not found.'
+    }), 404
+
+@app.errorhandler(RequestTimeout)
+def handle_timeout(error):
+    return jsonify({
+        'status': 'error',
+        'message': 'Request timed out. Please try again with smaller files.'
+    }), 408
 
 @app.before_request
 def clear_stale_temp():
