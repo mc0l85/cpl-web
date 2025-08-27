@@ -87,7 +87,6 @@ class PerformanceMonitor {
 }
 
 function initializeApp() {
-    document.addEventListener("DOMContentLoaded", function() {
     const socket = io();
     const connectionManager = new ConnectionManager(socket);
     
