@@ -89,25 +89,7 @@ class PerformanceMonitor {
 function initializeApp() {
     const socket = io();
     const connectionManager = new ConnectionManager(socket);
-    
-    let uploadedUsageFiles = [];
-    let reportDataForDownload = null;
-
-    // UI Elements
-    const runAnalysisBtn = document.getElementById('run-analysis-btn');
-    const statusLabel = document.getElementById('status-label');
-    const reportsContainer = document.getElementById('reports-container');
-    const downloadBtn = document.getElementById('download-btn');
-    const targetUsersFile = document.getElementById('targetUsersFile');
-    const usageReports = document.getElementById('usageReports');
-    const targetFileStatus = document.getElementById('target-file-status');
-    const usageFilesStatus = document.getElementById('usage-files-status');
-    const searchBtn = document.getElementById('search-btn');
-    const userEmailEntry = document.getElementById('user-email-entry');
-    const deepDiveResults = document.getElementById('deep-dive-results');
-    const deepDiveChartContainer = document.getElementById('deep-dive-chart-container');
-    let deepDiveChart = null;
-    
+    const chartManager = new ChartManager();
     const uploadManager = new UploadManager();
 
     // Debug: Check if elements exist
