@@ -579,22 +579,48 @@
     <script src="/static/js/socket.io.min.js"></script>
     <script src="/static/js/apexcharts.min.js"></script>
     <script>
-        // CDN fallback loader
+        // CDN fallback loader with timeout and better error handling
         function loadFallback(src, fallbackSrc, callback) {
             const script = document.createElement('script');
             script.src = src;
-            script.onload = callback;
+            
+            // Add timeout for CDN loading
+            const timeout = setTimeout(() => {
+                console.warn(`CDN loading timeout for ${src}, trying fallback`);
+                script.onerror(); // Trigger fallback
+            }, 5000);
+            
+            script.onload = () => {
+                clearTimeout(timeout);
+                callback();
+            };
+            
             script.onerror = () => {
+                clearTimeout(timeout);
                 console.warn(`Failed to load ${src}, trying fallback`);
+                
                 const fallbackScript = document.createElement('script');
                 fallbackScript.src = fallbackSrc;
-                fallbackScript.onload = callback;
-                fallbackScript.onerror = () => {
-                    console.error(`Failed to load both ${src} and ${fallbackSrc}`);
-                    showCriticalError('Failed to load required resources. Please refresh the page.');
+                
+                const fallbackTimeout = setTimeout(() => {
+                    console.warn(`Fallback loading timeout for ${fallbackSrc}, proceeding anyway`);
+                    callback(); // Proceed even if fallback fails
+                }, 3000);
+                
+                fallbackScript.onload = () => {
+                    clearTimeout(fallbackTimeout);
+                    callback();
                 };
+                
+                fallbackScript.onerror = () => {
+                    clearTimeout(fallbackTimeout);
+                    console.error(`Failed to load both ${src} and ${fallbackSrc}, proceeding anyway`);
+                    callback(); // Proceed even if both fail
+                };
+                
                 document.head.appendChild(fallbackScript);
             };
+            
             document.head.appendChild(script);
         }
 
@@ -911,7 +937,7 @@
                 chart.render();
                 return chart;
             }
-            const distributionChart = chartManager.createChart("#distribution-chart", options);
+            const distributionChart = createDistributionChart("#distribution-chart");
             
             // File Handling with modern UI feedback
             const handleFileUpload = (file, type, statusElement) => {
@@ -955,6 +981,7 @@
             };
             
             targetUsersFile.addEventListener('change', (e) => {
+                console.log('targetUsersFile change event triggered!', e.target.files);
                 if (e.target.files.length > 0) {
                     targetFileStatus.innerHTML = '';
                     const filterSelects = ['company-filter', 'department-filter', 'location-filter', 'manager-filter'];
