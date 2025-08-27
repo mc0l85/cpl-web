@@ -23,7 +23,7 @@ socketio = SocketIO(app, async_mode=async_mode)
 @app.route('/')
 def index():
     if 'user_id' not in session:
-                session['user_id'] = str(uuid.uuid4())
+        session['user_id'] = str(uuid.uuid4())
         session.permanent = True
         session['file_paths'] = {'usage': {}, 'target': None}
     
