@@ -873,19 +873,37 @@ function initializeApp() {
                 const month = now.toLocaleString('default', { month: 'short' });
                 const day = now.getDate();
                 
-                // Get selected managers for filename
-                const selectedManagers = Array.from(document.getElementById('manager-filter').selectedOptions).map(opt => opt.value);
-                let managerSuffix = '';
-                if (selectedManagers.length > 0) {
-                    // Extract last names and join with underscores
-                    const lastNames = selectedManagers.map(manager => {
+                // Get all applied filters for filename
+                const appliedFilters = [];
+                
+                // Check each filter type and add selected values
+                const companies = Array.from(document.getElementById('company-filter').selectedOptions).map(opt => opt.value);
+                const departments = Array.from(document.getElementById('department-filter').selectedOptions).map(opt => opt.value);
+                const locations = Array.from(document.getElementById('location-filter').selectedOptions).map(opt => opt.value);
+                const managers = Array.from(document.getElementById('manager-filter').selectedOptions).map(opt => opt.value);
+                
+                if (companies.length > 0) appliedFilters.push(...companies);
+                if (departments.length > 0) appliedFilters.push(...departments);
+                if (locations.length > 0) appliedFilters.push(...locations);
+                if (managers.length > 0) {
+                    // For managers, extract last names
+                    const lastNames = managers.map(manager => {
                         const parts = manager.trim().split(' ');
-                        return parts[parts.length - 1]; // Get last part as last name
+                        return parts[parts.length - 1];
                     });
-                    managerSuffix = '-' + lastNames.join('_');
+                    appliedFilters.push(...lastNames);
                 }
                 
-                const baseFilename = `${year}${month}${day}-CopilotAnalysis${managerSuffix}`;
+                // Clean filter names (remove spaces, special chars) and join with underscores
+                let filterSuffix = '';
+                if (appliedFilters.length > 0) {
+                    const cleanFilters = appliedFilters.map(filter => 
+                        filter.replace(/[^a-zA-Z0-9]/g, '').substring(0, 10) // Remove special chars, limit length
+                    );
+                    filterSuffix = '-' + cleanFilters.join('_');
+                }
+                
+                const baseFilename = `${year}${month}${day}-CopilotAnalysis${filterSuffix}`;
                 
                 // Download Excel report
                 if (reportsData.excel_b64) {
