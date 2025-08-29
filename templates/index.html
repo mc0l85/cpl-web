@@ -478,8 +478,8 @@
                             </button>
                             <div id="status-label" class="text-center text-muted"></div>
 <div id="connection-status" class="text-center text-muted mt-2"></div>
-                            <div id="reports-container" style="display: none;">
-                                <button id="download-btn" class="btn btn-outline-light btn-lg">
+                            <div id="reports-container" style="display: block;">
+                                <button id="download-btn" class="btn btn-outline-secondary btn-lg" disabled>
                                     <i class="fas fa-download"></i> Download Reports
                                 </button>
                             </div>
@@ -761,6 +761,11 @@ function initializeApp() {
                 // Store reports data for download
                 reportsData = data.reports;
                 
+                // Enable and style the download button like the Run Analysis button
+                const downloadBtn = document.getElementById('download-btn');
+                downloadBtn.disabled = false;
+                downloadBtn.className = 'btn btn-neon btn-lg';
+                
                 document.getElementById('reports-container').style.display = 'block';
             });
 
@@ -823,7 +828,13 @@ function initializeApp() {
                 document.getElementById('run-analysis-btn').disabled = true;
                 document.getElementById('run-analysis-btn').innerHTML = '<i class="loading-spinner me-2"></i> Analyzing...';
                 document.getElementById('status-label').innerHTML = '<span class="text-info"><i class="loading-spinner me-2"></i>Starting analysis...</span>';
-                document.getElementById('reports-container').style.display = 'none';
+                
+                // Disable and dim the download button during analysis
+                const downloadBtn = document.getElementById('download-btn');
+                downloadBtn.disabled = true;
+                downloadBtn.className = 'btn btn-outline-secondary btn-lg';
+                
+                document.getElementById('reports-container').style.display = 'block';
                 
                 const filters = {
                     companies: Array.from(document.getElementById('company-filter').selectedOptions).map(opt => opt.value),
@@ -856,16 +867,36 @@ function initializeApp() {
                     return;
                 }
                 
+                // Generate dynamic filename
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = now.toLocaleString('default', { month: 'short' });
+                const day = now.getDate();
+                
+                // Get selected managers for filename
+                const selectedManagers = Array.from(document.getElementById('manager-filter').selectedOptions).map(opt => opt.value);
+                let managerSuffix = '';
+                if (selectedManagers.length > 0) {
+                    // Extract last names and join with underscores
+                    const lastNames = selectedManagers.map(manager => {
+                        const parts = manager.trim().split(' ');
+                        return parts[parts.length - 1]; // Get last part as last name
+                    });
+                    managerSuffix = '-' + lastNames.join('_');
+                }
+                
+                const baseFilename = `${year}${month}${day}-CopilotAnalysis${managerSuffix}`;
+                
                 // Download Excel report
                 if (reportsData.excel_b64) {
                     const excelBlob = base64ToBlob(reportsData.excel_b64, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-                    downloadBlob(excelBlob, 'copilot_analysis_report.xlsx');
+                    downloadBlob(excelBlob, `${baseFilename}.xlsx`);
                 }
                 
                 // Download HTML report
                 if (reportsData.html_b64) {
                     const htmlBlob = base64ToBlob(reportsData.html_b64, 'text/html');
-                    downloadBlob(htmlBlob, 'copilot_analysis_report.html');
+                    downloadBlob(htmlBlob, `${baseFilename}.html`);
                 }
             });
 
