@@ -936,6 +936,35 @@ function initializeApp() {
                     searchBtn.style.zIndex = '1000';
                     searchBtn.style.position = 'relative';
                     
+                    // Add multiple event types for testing
+                    searchBtn.addEventListener('mousedown', function() {
+                        console.log('MOUSEDOWN on search button detected!');
+                    });
+                    
+                    searchBtn.addEventListener('mouseup', function() {
+                        console.log('MOUSEUP on search button detected!');
+                    });
+                    
+                    searchBtn.addEventListener('click', function(e) {
+                        console.log('CLICK EVENT on search button detected!', e);
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        const emailInput = document.getElementById('user-email-entry');
+                        const email = emailInput ? emailInput.value.trim() : '';
+                        console.log('Email entered:', email);
+                        
+                        if (email) {
+                            console.log('Emitting perform_deep_dive event');
+                            searchBtn.disabled = true;
+                            searchBtn.innerHTML = '<i class="loading-spinner me-2"></i> Analyzing...';
+                            document.getElementById('deep-dive-results').textContent = 'Searching for user data...';
+                            socket.emit('perform_deep_dive', { email: email });
+                        } else {
+                            alert('Please enter an email address');
+                        }
+                    });
+                    
                     console.log('Deep dive onclick handler attached successfully');
                     console.log('Button styles:', {
                         pointerEvents: searchBtn.style.pointerEvents,
@@ -943,6 +972,19 @@ function initializeApp() {
                         position: searchBtn.style.position,
                         disabled: searchBtn.disabled
                     });
+                    
+                    // Add visual indicator to confirm we have the right button
+                    searchBtn.style.border = '3px solid red';
+                    setTimeout(() => {
+                        searchBtn.style.border = '';
+                    }, 3000);
+                    
+                    // Test if we can programmatically trigger the button
+                    console.log('Testing programmatic click...');
+                    setTimeout(() => {
+                        console.log('Triggering test click on search button');
+                        searchBtn.click();
+                    }, 2000);
                 }
             }, 1000);
             
