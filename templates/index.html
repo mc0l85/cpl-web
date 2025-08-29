@@ -636,6 +636,10 @@ function initializeApp() {
 
             function showStatus(elementId, message, type) {
                 const statusDiv = document.getElementById(elementId);
+                if (!statusDiv) {
+                    console.error(`Status element not found: ${elementId}`);
+                    return;
+                }
                 const statusHtml = `<div class="status-message status-${type}">${message}</div>`;
                 if (elementId === 'usage-files-status') {
                     statusDiv.innerHTML += statusHtml; // Append for multiple files
@@ -647,7 +651,9 @@ function initializeApp() {
             function populateFilters(filters) {
                 ['companies', 'departments', 'locations', 'managers'].forEach(key => {
                     const select = document.getElementById(`${key.slice(0, -1)}-filter`);
-                    select.innerHTML = filters[key].map(item => `<option value="${item}">${item}</option>`).join('');
+                    if (select && filters[key]) {
+                        select.innerHTML = filters[key].map(item => `<option value="${item}">${item}</option>`).join('');
+                    }
                 });
             }
 
@@ -824,8 +830,12 @@ function initializeApp() {
             }
         }
 
-        // Call immediately (all scripts already loaded)
-        initializeApp();
+        // Ensure DOM is ready before initializing
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeApp);
+        } else {
+            initializeApp();
+        }
     </script>
     <footer class="mt-5 text-center text-muted small">
         <p>&copy; 2024 Copilot Analytics. All rights reserved.</p>
