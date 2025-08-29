@@ -603,16 +603,29 @@ class CopilotAnalyzer:
             col_display_map = {
                 'Usage Complexity': 'Total Tools Used'
             }
+            
+            # Define columns for No Use tabs (subset of main columns)
+            no_use_cols = ['Global Rank', 'Email', 'Overall Recency', 'Avg Tools / Report', 'Days Since License', 'Usage Trend']
+            
             for sheet_name, df in sheets.items():
                 df_local = df.copy()
                 # Rename columns for display
                 for old_name, new_name in col_display_map.items():
                     if old_name in df_local.columns:
                         df_local = df_local.rename(columns={old_name: new_name})
-                for c in cols:
+                
+                # Use different column sets for No Use tabs vs other tabs
+                if sheet_name.startswith('No Use'):
+                    target_cols = no_use_cols
+                else:
+                    target_cols = cols
+                
+                # Ensure all target columns exist
+                for c in target_cols:
                     if c not in df_local.columns:
                         df_local[c] = pd.Series([np.nan]*len(df_local))
-                df_to_write = df_local[cols] if not df_local.empty else pd.DataFrame(columns=cols)
+                
+                df_to_write = df_local[target_cols] if not df_local.empty else pd.DataFrame(columns=target_cols)
                 df_to_write.to_excel(writer, sheet_name=sheet_name, index=False, float_format="%.2f")
                 self.style_excel_sheet(writer.sheets[sheet_name], df_to_write)
 
