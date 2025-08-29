@@ -728,11 +728,24 @@ function initializeApp() {
                     }
                 },
                 tooltip: {
+                    enabled: true,
                     style: {
                         fontSize: '12px',
+                        fontFamily: 'inherit',
                         color: '#000000'
                     },
-                    theme: 'light'
+                    theme: 'light',
+                    fillSeriesColor: false,
+                    custom: function({series, seriesIndex, dataPointIndex, w}) {
+                        const value = series[seriesIndex];
+                        const label = w.globals.labels[seriesIndex];
+                        const percentage = ((value / series.reduce((a, b) => a + b, 0)) * 100).toFixed(1);
+                        return '<div style="padding: 8px; color: #000000; background: #ffffff; border: 1px solid #ccc; border-radius: 4px;">' +
+                               '<strong>' + label + '</strong><br/>' +
+                               'Count: ' + value + '<br/>' +
+                               'Percentage: ' + percentage + '%' +
+                               '</div>';
+                    }
                 }
             };
             const distributionChart = new ApexCharts(document.querySelector("#distribution-chart"), distributionOptions);
@@ -850,15 +863,24 @@ function initializeApp() {
             });
 
             // Search button for deep dive
-            document.getElementById('search-btn').addEventListener('click', () => {
-                const email = document.getElementById('user-email-entry').value.trim();
-                if (email) {
-                    document.getElementById('search-btn').disabled = true;
-                    document.getElementById('search-btn').innerHTML = '<i class="loading-spinner me-2"></i> Analyzing...';
-                    document.getElementById('deep-dive-results').textContent = 'Searching for user data...';
-                    socket.emit('perform_deep_dive', { email: email });
-                }
-            });
+            const searchBtn = document.getElementById('search-btn');
+            const emailInput = document.getElementById('user-email-entry');
+            
+            if (searchBtn && emailInput) {
+                searchBtn.addEventListener('click', () => {
+                    const email = emailInput.value.trim();
+                    if (email) {
+                        searchBtn.disabled = true;
+                        searchBtn.innerHTML = '<i class="loading-spinner me-2"></i> Analyzing...';
+                        document.getElementById('deep-dive-results').textContent = 'Searching for user data...';
+                        socket.emit('perform_deep_dive', { email: email });
+                    } else {
+                        alert('Please enter an email address');
+                    }
+                });
+            } else {
+                console.error('Deep dive elements not found:', { searchBtn: !!searchBtn, emailInput: !!emailInput });
+            }
 
             // Download button implementation
             document.getElementById('download-btn').addEventListener('click', () => {
