@@ -430,12 +430,36 @@ class CopilotAnalyzer:
             except Exception as _:
                 pass
             self.update_status("Success! Reports are ready for download.")
+            # Calculate usage recency buckets
+            current_date = self.reference_date
+            recency_buckets = {}
+            
+            for _, user in self.utilized_metrics_df.iterrows():
+                last_activity = user.get('Overall Recency')
+                if pd.isna(last_activity):
+                    bucket = '90+d'
+                else:
+                    days_since = (current_date - pd.to_datetime(last_activity)).days
+                    if days_since <= 7:
+                        bucket = 'Recent'
+                    elif days_since <= 30:
+                        bucket = '30d'
+                    elif days_since <= 45:
+                        bucket = '45d'
+                    elif days_since <= 60:
+                        bucket = '60d'
+                    else:
+                        bucket = '90+d'
+                
+                recency_buckets[bucket] = recency_buckets.get(bucket, 0) + 1
+            
+            # Ensure all buckets exist with 0 if no users
             cat_counts = {
-                'power_user': int((self.utilized_metrics_df['Classification'].str.startswith('Power User')).sum()),
-                'consistent_user': int((self.utilized_metrics_df['Classification'].str.startswith('Consistent User')).sum()),
-                'coaching': int((self.utilized_metrics_df['Classification'].str.startswith('Coaching Opportunity')).sum()),
-                'new_user': int((self.utilized_metrics_df['Classification'].str.startswith('New User')).sum()),
-                'recapture': int((self.utilized_metrics_df['Classification'].str.startswith('License Recapture')).sum()),
+                'Recent': recency_buckets.get('Recent', 0),
+                '30d': recency_buckets.get('30d', 0),
+                '45d': recency_buckets.get('45d', 0),
+                '60d': recency_buckets.get('60d', 0),
+                '90+d': recency_buckets.get('90+d', 0),
             }
             return { 'status': 'success', 'dashboard': { 'total': len(self.utilized_metrics_df), 'categories': cat_counts }, 'reports': { 'excel_bytes': excel_bytes, 'html_string': leaderboard_html }, 'deep_dive_data': { 'full_usage_data': self.full_usage_data, 'utilized_metrics_df': self.utilized_metrics_df, 'debug': debug_files } }
         except Exception as e:
@@ -477,7 +501,15 @@ class CopilotAnalyzer:
 
         # Calculate average tools used per report (similar to recent_activity in deep dive)
         df['avg_tools_per_report_recent'] = 0
+        total_rows = len(df)
+        self.update_status(f"Processing {total_rows} usage records for trend analysis...")
+        
         for idx, row in df.iterrows():
+            # Show progress every 1000 rows or at key milestones
+            if idx % 1000 == 0 or idx in [total_rows//4, total_rows//2, 3*total_rows//4]:
+                progress_pct = int((idx / total_rows) * 100)
+                self.update_status(f"Analyzing usage patterns... {progress_pct}% complete ({idx:,}/{total_rows:,} records)")
+            
             recent_tools = 0
             report_date = row['Report Refresh Date']
             for col in copilot_tool_cols:
@@ -488,6 +520,8 @@ class CopilotAnalyzer:
                     if days_since_use <= 30:  # Tool used in last 30 days
                         recent_tools += 1
             df.at[idx, 'avg_tools_per_report_recent'] = recent_tools
+        
+        self.update_status("Aggregating monthly usage trends...")
 
         # Create month column for grouping
         df['Month'] = df['Report Refresh Date'].dt.to_period('M').dt.to_timestamp()
