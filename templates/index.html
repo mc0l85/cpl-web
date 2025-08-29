@@ -649,10 +649,20 @@ function initializeApp() {
             }
 
             function populateFilters(filters) {
-                ['companies', 'departments', 'locations', 'managers'].forEach(key => {
-                    const select = document.getElementById(`${key.slice(0, -1)}-filter`);
+                const keyMapping = {
+                    'companies': 'company-filter',
+                    'departments': 'department-filter', 
+                    'locations': 'location-filter',
+                    'managers': 'manager-filter'
+                };
+                
+                Object.keys(keyMapping).forEach(key => {
+                    const select = document.getElementById(keyMapping[key]);
                     if (select && filters[key]) {
                         select.innerHTML = filters[key].map(item => `<option value="${item}">${item}</option>`).join('');
+                        console.log(`Populated ${keyMapping[key]} with ${filters[key].length} items`);
+                    } else {
+                        console.warn(`Failed to populate ${keyMapping[key]}: select=${!!select}, data=${!!filters[key]}`);
                     }
                 });
             }
