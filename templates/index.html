@@ -865,8 +865,10 @@ function initializeApp() {
             // Search button for deep dive - using event delegation and multiple approaches
             console.log('Setting up deep dive button...');
             
-            // Try event delegation on the document
+            // Debug all clicks to see what's being clicked
             document.addEventListener('click', function(e) {
+                console.log('Document click detected:', e.target, 'ID:', e.target.id, 'Classes:', e.target.className);
+                
                 if (e.target && e.target.id === 'search-btn') {
                     console.log('Deep dive button clicked via delegation!', e);
                     e.preventDefault();
@@ -884,6 +886,15 @@ function initializeApp() {
                         socket.emit('perform_deep_dive', { email: email });
                     } else {
                         alert('Please enter an email address');
+                    }
+                }
+                
+                // Check if clicking on child elements of the button
+                if (e.target && e.target.closest && e.target.closest('#search-btn')) {
+                    console.log('Clicked on child of search button:', e.target);
+                    const searchBtn = document.getElementById('search-btn');
+                    if (searchBtn) {
+                        searchBtn.click(); // Trigger the button click
                     }
                 }
             });
@@ -920,9 +931,34 @@ function initializeApp() {
                         }
                     };
                     
+                    // Ensure button is clickable
+                    searchBtn.style.pointerEvents = 'auto';
+                    searchBtn.style.zIndex = '1000';
+                    searchBtn.style.position = 'relative';
+                    
                     console.log('Deep dive onclick handler attached successfully');
+                    console.log('Button styles:', {
+                        pointerEvents: searchBtn.style.pointerEvents,
+                        zIndex: searchBtn.style.zIndex,
+                        position: searchBtn.style.position,
+                        disabled: searchBtn.disabled
+                    });
                 }
             }, 1000);
+            
+            // Add CSS to ensure button is clickable
+            const style = document.createElement('style');
+            style.textContent = `
+                #search-btn {
+                    pointer-events: auto !important;
+                    z-index: 1000 !important;
+                    position: relative !important;
+                }
+                #search-btn:disabled {
+                    pointer-events: none !important;
+                }
+            `;
+            document.head.appendChild(style);
 
             // Download button implementation
             document.getElementById('download-btn').addEventListener('click', () => {
