@@ -706,8 +706,15 @@ function initializeApp() {
                     labels: { colors: '#fff' }
                 },
                 dataLabels: {
+                    enabled: true,
+                    formatter: function (val, opts) {
+                        const count = opts.w.config.series[opts.seriesIndex];
+                        return count + ' (' + val.toFixed(1) + '%)';
+                    },
                     style: {
-                        colors: ['#000000']
+                        colors: ['#000000'],
+                        fontSize: '12px',
+                        fontWeight: 'bold'
                     }
                 },
                 plotOptions: {
