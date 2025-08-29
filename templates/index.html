@@ -722,14 +722,17 @@ function initializeApp() {
                         expandOnClick: true,
                         donut: {
                             labels: {
-                                show: true,
-                                total: {
-                                    show: true,
-                                    color: '#000000'
-                                }
+                                show: false
                             }
                         }
                     }
+                },
+                tooltip: {
+                    style: {
+                        fontSize: '12px',
+                        color: '#000000'
+                    },
+                    theme: 'light'
                 }
             };
             const distributionChart = new ApexCharts(document.querySelector("#distribution-chart"), distributionOptions);
