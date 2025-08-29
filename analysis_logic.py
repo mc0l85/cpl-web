@@ -541,35 +541,48 @@ class CopilotAnalyzer:
         return trend_df
 
     def style_excel_sheet(self, worksheet, df):
-        if df.empty: return
+        # Always format headers, even for empty sheets
+        if len(df.columns) == 0: return
+        
+        from openpyxl.styles import PatternFill, Font, Alignment
+        from openpyxl.formatting.rule import ColorScaleRule, DataBarRule
+        from openpyxl.utils import get_column_letter
+        
         header_fill = PatternFill(start_color="2d3748", end_color="2d3748", fill_type="solid")
         header_font = Font(bold=True, color="FFFFFF")
         for col_num, column_title in enumerate(df.columns, 1):
             cell = worksheet.cell(row=1, column=col_num)
             cell.fill, cell.font, cell.alignment = header_fill, header_font, Alignment(horizontal='center')
-        stripe_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
-        for row_index in range(2, len(df) + 2):
-            if row_index % 2 == 1:
-                for col_index in range(1, len(df.columns) + 1):
-                    worksheet.cell(row=row_index, column=col_index).fill = stripe_fill
+        
+        # Only apply row striping if there's data
+        if not df.empty:
+            stripe_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
+            for row_index in range(2, len(df) + 2):
+                if row_index % 2 == 1:
+                    for col_index in range(1, len(df.columns) + 1):
+                        worksheet.cell(row=row_index, column=col_index).fill = stripe_fill
+        # Set column widths
         for col_num, column_title in enumerate(df.columns, 1):
             max_length = len(str(column_title))
-            for cell_value in df[column_title]:
-                if len(str(cell_value)) > max_length: max_length = len(str(cell_value))
+            if not df.empty:
+                for cell_value in df[column_title]:
+                    if len(str(cell_value)) > max_length: max_length = len(str(cell_value))
             worksheet.column_dimensions[get_column_letter(col_num)].width = max_length + 2
-        red, yellow, green = "F8696B", "FFEB84", "63BE7B"
-        if 'Engagement Score' in df.columns:
-            col_letter = get_column_letter(df.columns.get_loc('Engagement Score') + 1)
-            cell_range = f"{col_letter}2:{col_letter}{len(df)+1}"
-            worksheet.conditional_formatting.add(cell_range, ColorScaleRule(start_type='min', start_color=red, mid_type='percentile', mid_value=50, mid_color=yellow, end_type='max', end_color=green))
-        if 'Adjusted Consistency (%)' in df.columns:
-            col_letter = get_column_letter(df.columns.get_loc('Adjusted Consistency (%)') + 1)
-            cell_range = f"{col_letter}2:{col_letter}{len(df)+1}"
-            worksheet.conditional_formatting.add(cell_range, DataBarRule(start_type='min', end_type='max', color=green))
-        if 'Adoption Velocity' in df.columns:
-            col_letter = get_column_letter(df.columns.get_loc('Adoption Velocity') + 1)
-            cell_range = f"{col_letter}2:{col_letter}{len(df)+1}"
-            worksheet.conditional_formatting.add(cell_range, ColorScaleRule(start_type='min', start_color=yellow, mid_type='percentile', mid_value=50, mid_color=yellow, end_type='max', end_color=green))
+        # Only apply conditional formatting if there's data
+        if not df.empty:
+            red, yellow, green = "F8696B", "FFEB84", "63BE7B"
+            if 'Engagement Score' in df.columns:
+                col_letter = get_column_letter(df.columns.get_loc('Engagement Score') + 1)
+                cell_range = f"{col_letter}2:{col_letter}{len(df)+1}"
+                worksheet.conditional_formatting.add(cell_range, ColorScaleRule(start_type='min', start_color=red, mid_type='percentile', mid_value=50, mid_color=yellow, end_type='max', end_color=green))
+            if 'Adjusted Consistency (%)' in df.columns:
+                col_letter = get_column_letter(df.columns.get_loc('Adjusted Consistency (%)') + 1)
+                cell_range = f"{col_letter}2:{col_letter}{len(df)+1}"
+                worksheet.conditional_formatting.add(cell_range, DataBarRule(start_type='min', end_type='max', color=green))
+            if 'Adoption Velocity' in df.columns:
+                col_letter = get_column_letter(df.columns.get_loc('Adoption Velocity') + 1)
+                cell_range = f"{col_letter}2:{col_letter}{len(df)+1}"
+                worksheet.conditional_formatting.add(cell_range, ColorScaleRule(start_type='min', start_color=yellow, mid_type='percentile', mid_value=50, mid_color=yellow, end_type='max', end_color=green))
 
     def create_excel_report(self, top_df, under_df, realloc_df, all_df=None, usage_complexity_trend_df=None):
         output = io.BytesIO()
