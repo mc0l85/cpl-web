@@ -406,6 +406,9 @@
 </head>
 <body>
     <div class="dashboard-container">
+        <script>
+            window.preSelectedManagers = {{ pre_selected_managers | tojson }};
+        </script>
         <!-- Header -->
         <div class="dashboard-header">
             <h1 class="dashboard-title">
@@ -579,29 +582,157 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
     <script>
-        function initializeApp() {
+function initializeApp() {
             console.log("🚀 App Initialized - All dependencies loaded!");
 
             const socket = io();
 
+            let uploadedUsageFiles = [];
+
             // File input event listeners
-            document.getElementById("targetUsersFile").addEventListener("change", (event) => {
+            document.getElementById("targetUsersFile").addEventListener("change", async (event) => {
                 const file = event.target.files[0];
-                console.log("📂 targetUsersFile selected:", file);
+                if (file) {
+                    await uploadFile(file, 'target', 'target-file-status');
+                }
             });
 
-            document.getElementById("usageReports").addEventListener("change", (event) => {
-                const files = event.target.files;
-                console.log("📂 usageReports selected:", files);
+            document.getElementById("usageReports").addEventListener("change", async (event) => {
+                const files = Array.from(event.target.files);
+                for (const file of files) {
+                    const result = await uploadFile(file, 'usage', 'usage-files-status');
+                    if (result && result.status === 'success') {
+                        uploadedUsageFiles.push(file.name);
+                    }
+                }
             });
 
-            // Example chart
-            const options = {
-                chart: { type: "bar" },
-                series: [{ name: "Sample", data: [1,2,3] }],
-                xaxis: { categories: ["A","B","C"] }
+            async function uploadFile(file, type, statusElementId) {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('file_type', type);
+                
+                try {
+                    const response = await fetch('/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const result = await response.json();
+                    
+                    if (result.status === 'success') {
+                        showStatus(statusElementId, `✓ ${file.name} uploaded successfully`, 'success');
+                        if (type === 'target' && result.filters) {
+                            populateFilters(result.filters);
+                        }
+                        return result;
+                    } else {
+                        showStatus(statusElementId, `✗ ${result.message}`, 'error');
+                    }
+                } catch (error) {
+                    showStatus(statusElementId, `✗ Upload failed: ${error.message}`, 'error');
+                }
+            }
+
+            function showStatus(elementId, message, type) {
+                const statusDiv = document.getElementById(elementId);
+                const statusHtml = `<div class="status-message status-${type}">${message}</div>`;
+                if (type === 'usage') {
+                    statusDiv.innerHTML += statusHtml; // Append for multiple files
+                } else {
+                    statusDiv.innerHTML = statusHtml;
+                }
+            }
+
+            function populateFilters(filters) {
+                ['companies', 'departments', 'locations', 'managers'].forEach(key => {
+                    const select = document.getElementById(`${key.slice(0, -1)}-filter`);
+                    select.innerHTML = filters[key].map(item => `<option value="${item}">${item}</option>`).join('');
+                });
+            }
+
+            // Distribution chart
+            const distributionOptions = {
+                chart: { 
+                    type: "pie",
+                    height: 300
+                },
+                series: [],
+                labels: [],
+                colors: ['#39FF14', '#2fb912', '#1a8a0a', '#0d5c05', '#062e02'],
+                legend: {
+                    position: 'bottom',
+                    labels: { colors: '#fff' }
+                }
             };
-            new ApexCharts(document.querySelector("#distribution-chart"), options).render();
+            const distributionChart = new ApexCharts(document.querySelector("#distribution-chart"), distributionOptions);
+            distributionChart.render();
+
+            // WebSocket event handlers
+            socket.on('analysis_complete', (data) => {
+                document.getElementById('total-users').textContent = data.dashboard.total;
+                
+                const categories = Object.keys(data.dashboard.categories);
+                const values = Object.values(data.dashboard.categories);
+                
+                distributionChart.updateOptions({
+                    series: values,
+                    labels: categories
+                });
+                
+                document.getElementById('reports-container').style.display = 'block';
+                
+                // Handle downloads (implement download logic for excel and html)
+            });
+
+            socket.on('deep_dive_result', (data) => {
+                document.getElementById('deep-dive-results').textContent = data.text;
+                
+                const chartContainer = document.querySelector("#deep-dive-chart-container");
+                chartContainer.innerHTML = ''; // Clear previous chart
+                
+                if (data.chart_data) {
+                    const deepDiveOptions = {
+                        chart: { type: 'line', height: 400 },
+                        series: data.chart_data.series,
+                        xaxis: { categories: data.chart_data.categories }
+                    };
+                    const deepDiveChart = new ApexCharts(chartContainer, deepDiveOptions);
+                    deepDiveChart.render();
+                }
+            });
+
+            socket.on('analysis_error', (data) => {
+                alert(`Analysis Error: ${data.message}`);
+            });
+
+            // Run analysis button
+            document.getElementById('run-analysis-btn').addEventListener('click', () => {
+                const filters = {
+                    companies: Array.from(document.getElementById('company-filter').selectedOptions).map(opt => opt.value),
+                    departments: Array.from(document.getElementById('department-filter').selectedOptions).map(opt => opt.value),
+                    locations: Array.from(document.getElementById('location-filter').selectedOptions).map(opt => opt.value),
+                    managers: Array.from(document.getElementById('manager-filter').selectedOptions).map(opt => opt.value)
+                };
+                
+                socket.emit('start_analysis', {
+                    filters: filters,
+                    usage_filenames: uploadedUsageFiles
+                });
+            });
+
+            // Search button for deep dive
+            document.getElementById('search-btn').addEventListener('click', () => {
+                const email = document.getElementById('user-email-entry').value.trim();
+                if (email) {
+                    socket.emit('perform_deep_dive', { email: email });
+                }
+            });
+
+            // Download button (basic implementation - needs full download logic)
+            document.getElementById('download-btn').addEventListener('click', () => {
+                // Implement download of reports from data.reports
+                console.log('Download triggered');
+            });
         }
 
         // Call immediately (all scripts already loaded)
