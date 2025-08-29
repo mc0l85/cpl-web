@@ -636,7 +636,7 @@ function initializeApp() {
             function showStatus(elementId, message, type) {
                 const statusDiv = document.getElementById(elementId);
                 const statusHtml = `<div class="status-message status-${type}">${message}</div>`;
-                if (type === 'usage') {
+                if (elementId === 'usage-files-status') {
                     statusDiv.innerHTML += statusHtml; // Append for multiple files
                 } else {
                     statusDiv.innerHTML = statusHtml;
