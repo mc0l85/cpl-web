@@ -667,6 +667,9 @@ function initializeApp() {
             const distributionChart = new ApexCharts(document.querySelector("#distribution-chart"), distributionOptions);
             distributionChart.render();
 
+            // Store reports data globally for download
+            let reportsData = null;
+
             // WebSocket event handlers
             socket.on('analysis_complete', (data) => {
                 document.getElementById('total-users').textContent = data.dashboard.total;
@@ -679,9 +682,10 @@ function initializeApp() {
                     labels: categories
                 });
                 
-                document.getElementById('reports-container').style.display = 'block';
+                // Store reports data for download
+                reportsData = data.reports;
                 
-                // Handle downloads (implement download logic for excel and html)
+                document.getElementById('reports-container').style.display = 'block';
             });
 
             socket.on('deep_dive_result', (data) => {
@@ -728,11 +732,49 @@ function initializeApp() {
                 }
             });
 
-            // Download button (basic implementation - needs full download logic)
+            // Download button implementation
             document.getElementById('download-btn').addEventListener('click', () => {
-                // Implement download of reports from data.reports
-                console.log('Download triggered');
+                if (!reportsData) {
+                    alert('No reports available. Please run analysis first.');
+                    return;
+                }
+                
+                // Download Excel report
+                if (reportsData.excel_b64) {
+                    const excelBlob = base64ToBlob(reportsData.excel_b64, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                    downloadBlob(excelBlob, 'copilot_analysis_report.xlsx');
+                }
+                
+                // Download HTML report
+                if (reportsData.html_b64) {
+                    const htmlBlob = base64ToBlob(reportsData.html_b64, 'text/html');
+                    downloadBlob(htmlBlob, 'copilot_analysis_report.html');
+                }
             });
+
+            // Helper function to convert base64 to blob
+            function base64ToBlob(base64, mimeType) {
+                const byteCharacters = atob(base64);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                return new Blob([byteArray], { type: mimeType });
+            }
+
+            // Helper function to download blob as file
+            function downloadBlob(blob, filename) {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            }
         }
 
         // Call immediately (all scripts already loaded)
