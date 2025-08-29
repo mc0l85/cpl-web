@@ -862,25 +862,67 @@ function initializeApp() {
                 });
             });
 
-            // Search button for deep dive
-            const searchBtn = document.getElementById('search-btn');
-            const emailInput = document.getElementById('user-email-entry');
+            // Search button for deep dive - using event delegation and multiple approaches
+            console.log('Setting up deep dive button...');
             
-            if (searchBtn && emailInput) {
-                searchBtn.addEventListener('click', () => {
-                    const email = emailInput.value.trim();
+            // Try event delegation on the document
+            document.addEventListener('click', function(e) {
+                if (e.target && e.target.id === 'search-btn') {
+                    console.log('Deep dive button clicked via delegation!', e);
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    const emailInput = document.getElementById('user-email-entry');
+                    const email = emailInput ? emailInput.value.trim() : '';
+                    console.log('Email entered:', email);
+                    
                     if (email) {
-                        searchBtn.disabled = true;
-                        searchBtn.innerHTML = '<i class="loading-spinner me-2"></i> Analyzing...';
+                        console.log('Emitting perform_deep_dive event');
+                        e.target.disabled = true;
+                        e.target.innerHTML = '<i class="loading-spinner me-2"></i> Analyzing...';
                         document.getElementById('deep-dive-results').textContent = 'Searching for user data...';
                         socket.emit('perform_deep_dive', { email: email });
                     } else {
                         alert('Please enter an email address');
                     }
+                }
+            });
+            
+            // Also try direct attachment as backup
+            setTimeout(() => {
+                const searchBtn = document.getElementById('search-btn');
+                const emailInput = document.getElementById('user-email-entry');
+                
+                console.log('Delayed setup - Deep dive elements found:', { 
+                    searchBtn: !!searchBtn, 
+                    emailInput: !!emailInput 
                 });
-            } else {
-                console.error('Deep dive elements not found:', { searchBtn: !!searchBtn, emailInput: !!emailInput });
-            }
+                
+                if (searchBtn && emailInput) {
+                    console.log('Adding direct click event listener to search button');
+                    
+                    searchBtn.onclick = function(e) {
+                        console.log('Deep dive button clicked via onclick!', e);
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        const email = emailInput.value.trim();
+                        console.log('Email entered:', email);
+                        
+                        if (email) {
+                            console.log('Emitting perform_deep_dive event');
+                            searchBtn.disabled = true;
+                            searchBtn.innerHTML = '<i class="loading-spinner me-2"></i> Analyzing...';
+                            document.getElementById('deep-dive-results').textContent = 'Searching for user data...';
+                            socket.emit('perform_deep_dive', { email: email });
+                        } else {
+                            alert('Please enter an email address');
+                        }
+                    };
+                    
+                    console.log('Deep dive onclick handler attached successfully');
+                }
+            }, 1000);
 
             // Download button implementation
             document.getElementById('download-btn').addEventListener('click', () => {
