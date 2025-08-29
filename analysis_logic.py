@@ -590,8 +590,12 @@ class CopilotAnalyzer:
                         ) &
                         (pd.to_numeric(all_df['Days Since License'], errors='coerce').fillna(0) >= 90)
                     ]
+                    # Always create the tab, even if empty, for consistent structure
                     if not inactive_users.empty:
                         sheets[f'No Use {days}d'] = inactive_users.sort_values(by="Global Rank")
+                    else:
+                        # Create empty dataframe with same columns as all_df
+                        sheets[f'No Use {days}d'] = pd.DataFrame(columns=all_df.columns)
             wrote_any = False
             
             # Create all category sheets first
