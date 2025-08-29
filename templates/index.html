@@ -588,6 +588,7 @@ function initializeApp() {
             const socket = io();
 
             let uploadedUsageFiles = [];
+            let analysisInProgress = false;
 
             // File input event listeners
             document.getElementById("targetUsersFile").addEventListener("change", async (event) => {
@@ -672,6 +673,11 @@ function initializeApp() {
 
             // WebSocket event handlers
             socket.on('analysis_complete', (data) => {
+                analysisInProgress = false;
+                document.getElementById('run-analysis-btn').disabled = false;
+                document.getElementById('run-analysis-btn').innerHTML = '<i class="fas fa-play"></i> Run Analysis';
+                document.getElementById('status-label').innerHTML = '<span class="text-success">✓ Analysis complete! Reports ready for download.</span>';
+                
                 document.getElementById('total-users').textContent = data.dashboard.total;
                 
                 const categories = Object.keys(data.dashboard.categories);
@@ -689,6 +695,8 @@ function initializeApp() {
             });
 
             socket.on('deep_dive_result', (data) => {
+                document.getElementById('search-btn').disabled = false;
+                document.getElementById('search-btn').innerHTML = '<i class="fas fa-search"></i> Analyze User';
                 document.getElementById('deep-dive-results').textContent = data.text;
                 
                 const chartContainer = document.querySelector("#deep-dive-chart-container");
@@ -705,12 +713,48 @@ function initializeApp() {
                 }
             });
 
+            socket.on('deep_dive_error', (data) => {
+                document.getElementById('search-btn').disabled = false;
+                document.getElementById('search-btn').innerHTML = '<i class="fas fa-search"></i> Analyze User';
+                document.getElementById('deep-dive-results').textContent = `Error: ${data.message}`;
+            });
+
             socket.on('analysis_error', (data) => {
-                alert(`Analysis Error: ${data.message}`);
+                analysisInProgress = false;
+                document.getElementById('status-label').innerHTML = `<span class="text-danger">✗ Error: ${data.message}</span>`;
+                document.getElementById('run-analysis-btn').disabled = false;
+                document.getElementById('run-analysis-btn').innerHTML = '<i class="fas fa-play"></i> Run Analysis';
+            });
+
+            // Handle status updates during analysis
+            socket.on('status_update', (data) => {
+                document.getElementById('status-label').innerHTML = `<span class="text-info"><i class="loading-spinner me-2"></i>${data.message}</span>`;
+            });
+
+            // Handle connection status
+            socket.on('connect', () => {
+                document.getElementById('connection-status').innerHTML = '<span class="text-success">✓ Connected to server</span>';
+            });
+
+            socket.on('disconnect', () => {
+                document.getElementById('connection-status').innerHTML = '<span class="text-warning">⚠ Disconnected from server</span>';
             });
 
             // Run analysis button
             document.getElementById('run-analysis-btn').addEventListener('click', () => {
+                if (analysisInProgress) return;
+                
+                if (uploadedUsageFiles.length === 0) {
+                    alert('Please upload at least one usage report file before running analysis.');
+                    return;
+                }
+                
+                analysisInProgress = true;
+                document.getElementById('run-analysis-btn').disabled = true;
+                document.getElementById('run-analysis-btn').innerHTML = '<i class="loading-spinner me-2"></i> Analyzing...';
+                document.getElementById('status-label').innerHTML = '<span class="text-info"><i class="loading-spinner me-2"></i>Starting analysis...</span>';
+                document.getElementById('reports-container').style.display = 'none';
+                
                 const filters = {
                     companies: Array.from(document.getElementById('company-filter').selectedOptions).map(opt => opt.value),
                     departments: Array.from(document.getElementById('department-filter').selectedOptions).map(opt => opt.value),
@@ -728,6 +772,9 @@ function initializeApp() {
             document.getElementById('search-btn').addEventListener('click', () => {
                 const email = document.getElementById('user-email-entry').value.trim();
                 if (email) {
+                    document.getElementById('search-btn').disabled = true;
+                    document.getElementById('search-btn').innerHTML = '<i class="loading-spinner me-2"></i> Analyzing...';
+                    document.getElementById('deep-dive-results').textContent = 'Searching for user data...';
                     socket.emit('perform_deep_dive', { email: email });
                 }
             });
