@@ -600,15 +600,32 @@ function initializeApp() {
 
             document.getElementById("usageReports").addEventListener("change", async (event) => {
                 const files = Array.from(event.target.files);
+                let successCount = 0;
+                let errorCount = 0;
+                let totalFiles = files.length;
+                
+                // Clear previous status and show initial counter
+                document.getElementById('usage-files-status').innerHTML = `<div class="status-message status-info">Uploading ${totalFiles} files...</div>`;
+                
                 for (const file of files) {
-                    const result = await uploadFile(file, 'usage', 'usage-files-status');
+                    const result = await uploadFile(file, 'usage', 'usage-files-status', false); // Don't show individual status
                     if (result && result.status === 'success') {
                         uploadedUsageFiles.push(file.name);
+                        successCount++;
+                    } else {
+                        errorCount++;
+                    }
+                    
+                    // Update counter
+                    if (errorCount > 0) {
+                        document.getElementById('usage-files-status').innerHTML = `<div class="status-message status-warning">✓ ${successCount} uploaded, ✗ ${errorCount} failed (${totalFiles} total)</div>`;
+                    } else {
+                        document.getElementById('usage-files-status').innerHTML = `<div class="status-message status-success">✓ ${successCount} of ${totalFiles} reports uploaded successfully</div>`;
                     }
                 }
             });
 
-            async function uploadFile(file, type, statusElementId) {
+            async function uploadFile(file, type, statusElementId, showIndividualStatus = true) {
                 const formData = new FormData();
                 formData.append('file', file);
                 formData.append('file_type', type);
@@ -621,16 +638,24 @@ function initializeApp() {
                     const result = await response.json();
                     
                     if (result.status === 'success') {
-                        showStatus(statusElementId, `✓ ${file.name} uploaded successfully`, 'success');
+                        if (showIndividualStatus) {
+                            showStatus(statusElementId, `✓ ${file.name} uploaded successfully`, 'success');
+                        }
                         if (type === 'target' && result.filters) {
                             populateFilters(result.filters);
                         }
                         return result;
                     } else {
-                        showStatus(statusElementId, `✗ ${result.message}`, 'error');
+                        if (showIndividualStatus) {
+                            showStatus(statusElementId, `✗ ${result.message}`, 'error');
+                        }
+                        return result;
                     }
                 } catch (error) {
-                    showStatus(statusElementId, `✗ Upload failed: ${error.message}`, 'error');
+                    if (showIndividualStatus) {
+                        showStatus(statusElementId, `✗ Upload failed: ${error.message}`, 'error');
+                    }
+                    return { status: 'error', message: error.message };
                 }
             }
 
@@ -679,6 +704,25 @@ function initializeApp() {
                 legend: {
                     position: 'bottom',
                     labels: { colors: '#fff' }
+                },
+                dataLabels: {
+                    style: {
+                        colors: ['#000000']
+                    }
+                },
+                plotOptions: {
+                    pie: {
+                        expandOnClick: true,
+                        donut: {
+                            labels: {
+                                show: true,
+                                total: {
+                                    show: true,
+                                    color: '#000000'
+                                }
+                            }
+                        }
+                    }
                 }
             };
             const distributionChart = new ApexCharts(document.querySelector("#distribution-chart"), distributionOptions);
