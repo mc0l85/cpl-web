@@ -551,7 +551,7 @@
                             </span>
                             <input type="email" id="user-email-entry" class="form-control form-control-modern" placeholder="user@example.com">
                         </div>
-                        <button class="btn btn-neon w-100" type="button" id="search-btn" onclick="performDeepDive()">
+                        <button class="btn btn-outline-secondary w-100" type="button" id="search-btn" onclick="performDeepDive()" disabled>
                             <i class="fas fa-search"></i> Analyze User
                         </button>
                     </div>
@@ -781,6 +781,13 @@ function initializeApp() {
                 downloadBtn.disabled = false;
                 downloadBtn.className = 'btn btn-neon btn-lg';
                 
+                // Enable and style the deep dive button
+                const searchBtn = document.getElementById('search-btn');
+                if (searchBtn) {
+                    searchBtn.disabled = false;
+                    searchBtn.className = 'btn btn-neon w-100';
+                }
+                
                 document.getElementById('reports-container').style.display = 'block';
             });
 
@@ -849,6 +856,13 @@ function initializeApp() {
                 downloadBtn.disabled = true;
                 downloadBtn.className = 'btn btn-outline-secondary btn-lg';
                 
+                // Disable and dim the deep dive button during analysis
+                const searchBtn = document.getElementById('search-btn');
+                if (searchBtn) {
+                    searchBtn.disabled = true;
+                    searchBtn.className = 'btn btn-outline-secondary w-100';
+                }
+                
                 document.getElementById('reports-container').style.display = 'block';
                 
                 const filters = {
@@ -872,6 +886,12 @@ function initializeApp() {
                 
                 if (!emailInput || !searchBtn) {
                     console.error('Deep dive elements not found');
+                    return;
+                }
+                
+                // Check if button is disabled (analysis not complete)
+                if (searchBtn.disabled) {
+                    alert('Please run analysis first before using Deep Dive');
                     return;
                 }
                 
