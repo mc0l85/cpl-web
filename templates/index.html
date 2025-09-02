@@ -862,131 +862,46 @@ function initializeApp() {
                 });
             });
 
-            // Search button for deep dive - using event delegation and multiple approaches
-            console.log('Setting up deep dive button...');
-            
-            // Debug all clicks to see what's being clicked
-            document.addEventListener('click', function(e) {
-                console.log('Document click detected:', e.target, 'ID:', e.target.id, 'Classes:', e.target.className);
-                
-                if (e.target && e.target.id === 'search-btn') {
-                    console.log('Deep dive button clicked via delegation!', e);
-                    e.preventDefault();
-                    e.stopPropagation();
-                    
-                    const emailInput = document.getElementById('user-email-entry');
-                    const email = emailInput ? emailInput.value.trim() : '';
-                    console.log('Email entered:', email);
-                    
-                    if (email) {
-                        console.log('Emitting perform_deep_dive event');
-                        e.target.disabled = true;
-                        e.target.innerHTML = '<i class="loading-spinner me-2"></i> Analyzing...';
-                        document.getElementById('deep-dive-results').textContent = 'Searching for user data...';
-                        socket.emit('perform_deep_dive', { email: email });
-                    } else {
-                        alert('Please enter an email address');
-                    }
-                }
-                
-                // Check if clicking on child elements of the button
-                if (e.target && e.target.closest && e.target.closest('#search-btn')) {
-                    console.log('Clicked on child of search button:', e.target);
-                    const searchBtn = document.getElementById('search-btn');
-                    if (searchBtn) {
-                        searchBtn.click(); // Trigger the button click
-                    }
-                }
-            });
-            
-            // Also try direct attachment as backup
-            setTimeout(() => {
+            // Simple, direct approach for deep dive button
+            function setupDeepDive() {
                 const searchBtn = document.getElementById('search-btn');
                 const emailInput = document.getElementById('user-email-entry');
                 
-                console.log('Delayed setup - Deep dive elements found:', { 
-                    searchBtn: !!searchBtn, 
-                    emailInput: !!emailInput 
-                });
-                
-                if (searchBtn && emailInput) {
-                    console.log('Adding direct click event listener to search button');
-                    
-                    searchBtn.onclick = function(e) {
-                        console.log('Deep dive button clicked via onclick!', e);
-                        e.preventDefault();
-                        e.stopPropagation();
-                        
-                        const email = emailInput.value.trim();
-                        console.log('Email entered:', email);
-                        
-                        if (email) {
-                            console.log('Emitting perform_deep_dive event');
-                            searchBtn.disabled = true;
-                            searchBtn.innerHTML = '<i class="loading-spinner me-2"></i> Analyzing...';
-                            document.getElementById('deep-dive-results').textContent = 'Searching for user data...';
-                            socket.emit('perform_deep_dive', { email: email });
-                        } else {
-                            alert('Please enter an email address');
-                        }
-                    };
-                    
-                    // Ensure button is clickable
-                    searchBtn.style.pointerEvents = 'auto';
-                    searchBtn.style.zIndex = '1000';
-                    searchBtn.style.position = 'relative';
-                    
-                    // Add multiple event types for testing
-                    searchBtn.addEventListener('mousedown', function() {
-                        console.log('MOUSEDOWN on search button detected!');
-                    });
-                    
-                    searchBtn.addEventListener('mouseup', function() {
-                        console.log('MOUSEUP on search button detected!');
-                    });
-                    
-                    searchBtn.addEventListener('click', function(e) {
-                        console.log('CLICK EVENT on search button detected!', e);
-                        e.preventDefault();
-                        e.stopPropagation();
-                        
-                        const emailInput = document.getElementById('user-email-entry');
-                        const email = emailInput ? emailInput.value.trim() : '';
-                        console.log('Email entered:', email);
-                        
-                        if (email) {
-                            console.log('Emitting perform_deep_dive event');
-                            searchBtn.disabled = true;
-                            searchBtn.innerHTML = '<i class="loading-spinner me-2"></i> Analyzing...';
-                            document.getElementById('deep-dive-results').textContent = 'Searching for user data...';
-                            socket.emit('perform_deep_dive', { email: email });
-                        } else {
-                            alert('Please enter an email address');
-                        }
-                    });
-                    
-                    console.log('Deep dive onclick handler attached successfully');
-                    console.log('Button styles:', {
-                        pointerEvents: searchBtn.style.pointerEvents,
-                        zIndex: searchBtn.style.zIndex,
-                        position: searchBtn.style.position,
-                        disabled: searchBtn.disabled
-                    });
-                    
-                    // Add visual indicator to confirm we have the right button
-                    searchBtn.style.border = '3px solid red';
-                    setTimeout(() => {
-                        searchBtn.style.border = '';
-                    }, 3000);
-                    
-                    // Test if we can programmatically trigger the button
-                    console.log('Testing programmatic click...');
-                    setTimeout(() => {
-                        console.log('Triggering test click on search button');
-                        searchBtn.click();
-                    }, 2000);
+                if (!searchBtn || !emailInput) {
+                    console.log('Deep dive elements not ready, retrying...');
+                    setTimeout(setupDeepDive, 500);
+                    return;
                 }
-            }, 1000);
+                
+                console.log('Setting up deep dive functionality');
+                
+                // Clear any existing handlers
+                searchBtn.onclick = null;
+                searchBtn.replaceWith(searchBtn.cloneNode(true));
+                const newBtn = document.getElementById('search-btn');
+                
+                // Simple onclick handler
+                newBtn.onclick = function() {
+                    console.log('Deep dive button clicked!');
+                    const email = document.getElementById('user-email-entry').value.trim();
+                    
+                    if (!email) {
+                        alert('Please enter an email address');
+                        return;
+                    }
+                    
+                    console.log('Processing deep dive for:', email);
+                    newBtn.disabled = true;
+                    newBtn.innerHTML = '<i class="loading-spinner me-2"></i> Analyzing...';
+                    document.getElementById('deep-dive-results').textContent = 'Searching for user data...';
+                    socket.emit('perform_deep_dive', { email: email });
+                };
+                
+                console.log('Deep dive setup complete');
+            }
+            
+            // Start setup
+            setupDeepDive();
             
             // Add CSS to ensure button is clickable
             const style = document.createElement('style');
