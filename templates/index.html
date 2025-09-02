@@ -835,6 +835,24 @@ function initializeApp() {
                                 size: 6,
                                 sizeOffset: 3
                             }
+                        },
+                        tooltip: {
+                            enabled: true,
+                            theme: 'light',
+                            style: {
+                                fontSize: '12px',
+                                fontFamily: 'inherit',
+                                color: '#000000'
+                            },
+                            fillSeriesColor: false,
+                            x: {
+                                show: true
+                            },
+                            y: {
+                                formatter: function (val) {
+                                    return val;
+                                }
+                            }
                         }
                     };
                     const deepDiveChart = new ApexCharts(chartContainer, deepDiveOptions);
