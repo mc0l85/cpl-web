@@ -544,12 +544,14 @@
                     </div>
                     <p class="text-muted mb-4">Explore detailed insights for individual users. Make sure to run the analysis first.</p>
                     
-                    <div class="input-group mb-4">
-                        <span class="input-group-text bg-dark border-secondary">
-                            <i class="fas fa-envelope"></i>
-                        </span>
-                        <input type="email" id="user-email-entry" class="form-control form-control-modern" placeholder="user@example.com">
-                        <button class="btn btn-neon" type="button" id="search-btn">
+                    <div class="mb-4">
+                        <div class="input-group mb-2">
+                            <span class="input-group-text bg-dark border-secondary">
+                                <i class="fas fa-envelope"></i>
+                            </span>
+                            <input type="email" id="user-email-entry" class="form-control form-control-modern" placeholder="user@example.com">
+                        </div>
+                        <button class="btn btn-neon w-100" type="button" id="search-btn" onclick="performDeepDive()">
                             <i class="fas fa-search"></i> Analyze User
                         </button>
                     </div>
@@ -862,46 +864,33 @@ function initializeApp() {
                 });
             });
 
-            // Simple, direct approach for deep dive button
-            function setupDeepDive() {
-                const searchBtn = document.getElementById('search-btn');
+            // Global function for deep dive - called directly from HTML onclick
+            window.performDeepDive = function() {
+                console.log('Deep dive function called!');
                 const emailInput = document.getElementById('user-email-entry');
+                const searchBtn = document.getElementById('search-btn');
                 
-                if (!searchBtn || !emailInput) {
-                    console.log('Deep dive elements not ready, retrying...');
-                    setTimeout(setupDeepDive, 500);
+                if (!emailInput || !searchBtn) {
+                    console.error('Deep dive elements not found');
                     return;
                 }
                 
-                console.log('Setting up deep dive functionality');
+                const email = emailInput.value.trim();
+                console.log('Email entered:', email);
                 
-                // Clear any existing handlers
-                searchBtn.onclick = null;
-                searchBtn.replaceWith(searchBtn.cloneNode(true));
-                const newBtn = document.getElementById('search-btn');
+                if (!email) {
+                    alert('Please enter an email address');
+                    return;
+                }
                 
-                // Simple onclick handler
-                newBtn.onclick = function() {
-                    console.log('Deep dive button clicked!');
-                    const email = document.getElementById('user-email-entry').value.trim();
-                    
-                    if (!email) {
-                        alert('Please enter an email address');
-                        return;
-                    }
-                    
-                    console.log('Processing deep dive for:', email);
-                    newBtn.disabled = true;
-                    newBtn.innerHTML = '<i class="loading-spinner me-2"></i> Analyzing...';
-                    document.getElementById('deep-dive-results').textContent = 'Searching for user data...';
-                    socket.emit('perform_deep_dive', { email: email });
-                };
-                
-                console.log('Deep dive setup complete');
-            }
+                console.log('Processing deep dive for:', email);
+                searchBtn.disabled = true;
+                searchBtn.innerHTML = '<i class="loading-spinner me-2"></i> Analyzing...';
+                document.getElementById('deep-dive-results').textContent = 'Searching for user data...';
+                socket.emit('perform_deep_dive', { email: email });
+            };
             
-            // Start setup
-            setupDeepDive();
+            console.log('Deep dive function registered globally');
             
             // Add CSS to ensure button is clickable
             const style = document.createElement('style');
