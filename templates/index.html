@@ -811,6 +811,7 @@ function initializeApp() {
                             background: 'transparent'
                         },
                         series: data.chart_data.series,
+                        colors: ['#39FF14', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8'],
                         xaxis: { 
                             categories: data.chart_data.categories,
                             labels: { style: { colors: '#fff' } }
@@ -825,7 +826,14 @@ function initializeApp() {
                             borderColor: '#333'
                         },
                         stroke: {
-                            colors: ['#39FF14']
+                            width: 3,
+                            curve: 'smooth'
+                        },
+                        markers: {
+                            size: 5,
+                            hover: {
+                                size: 7
+                            }
                         }
                     };
                     const deepDiveChart = new ApexCharts(chartContainer, deepDiveOptions);
