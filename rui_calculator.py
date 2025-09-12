@@ -45,8 +45,14 @@ class RUICalculator:
         if manager_df is not None:
             manager_df = manager_df.copy()
             manager_df['UserPrincipalName'] = manager_df['UserPrincipalName'].str.lower()
+            # Only merge columns that exist in manager_df
+            merge_cols = ['UserPrincipalName']
+            for col in ['ManagerLine', 'Department', 'Company', 'City']:
+                if col in manager_df.columns:
+                    merge_cols.append(col)
+            
             users_df = users_df.merge(
-                manager_df[['UserPrincipalName', 'ManagerLine', 'Department', 'Company', 'City', 'JobTitle']],
+                manager_df[merge_cols],
                 left_on='Email',
                 right_on='UserPrincipalName',
                 how='left'

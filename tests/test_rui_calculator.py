@@ -72,8 +72,7 @@ def test_rui_calculator_with_managers():
         'ManagerLine': ['John Doe -> Brian McNamara'] * 6,
         'Department': ['Engineering'] * 6,
         'Company': ['TestCorp'] * 6,
-        'City': ['New York'] * 6,
-        'JobTitle': ['Engineer'] * 6
+        'City': ['New York'] * 6
     })
     
     calculator = RUICalculator(reference_date)
@@ -154,8 +153,7 @@ def test_manager_summary():
         'ManagerLine': ['Jane Smith -> Brian McNamara'] * 4 + ['John Doe -> Brian McNamara'] * 4,
         'Department': ['Engineering'] * 8,
         'Company': ['TestCorp'] * 8,
-        'City': ['New York'] * 8,
-        'JobTitle': ['Engineer'] * 8
+        'City': ['New York'] * 8
     })
     
     calculator = RUICalculator(reference_date)
