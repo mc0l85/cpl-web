@@ -400,8 +400,23 @@ class RUICalculator:
             )
         
         summary = summary.reset_index()
-        summary.columns = ['Manager Name', 'Team Size', 'Avg RUI', 
-                          'High Risk', 'Medium Risk', 'Low Risk', 'New Users', 'Action Required']
+        
+        # Ensure correct column order and types
+        summary = summary.rename(columns={
+            'immediate_manager': 'Manager Name',
+            'team_size': 'Team Size',
+            'avg_rui': 'Avg RUI',
+            'high_risk_count': 'High Risk',
+            'medium_risk_count': 'Medium Risk',
+            'low_risk_count': 'Low Risk',
+            'new_user_count': 'New Users',
+            'action_required': 'Action Required'
+        })
+        
+        # Ensure numeric columns are integers
+        for col in ['Team Size', 'High Risk', 'Medium Risk', 'Low Risk', 'New Users', 'Action Required']:
+            if col in summary.columns:
+                summary[col] = summary[col].fillna(0).astype(int)
         
         # Sort by action required, then avg RUI
         summary = summary.sort_values(['Action Required', 'Avg RUI'], 

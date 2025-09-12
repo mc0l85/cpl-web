@@ -78,7 +78,7 @@ def test_manager_summary_with_new_users():
     
     manager_df = pd.DataFrame({
         'UserPrincipalName': [f'user{i}@test.com' for i in range(8)],
-        'ManagerLine': ['Jane Smith -> Brian McNamara'] * 8,
+        'ManagerLine': [f'User{i} -> Jane Smith -> Brian McNamara' for i in range(8)],
         'Department': ['Engineering'] * 8,
         'Company': ['TestCorp'] * 8,
         'City': ['New York'] * 8

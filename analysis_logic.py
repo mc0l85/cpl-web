@@ -801,26 +801,37 @@ class CopilotAnalyzer:
                 if sheet_name == 'Manager Summary':
                     # Color scale for Avg RUI
                     if 'Avg RUI' in df_to_write.columns:
-                        avg_rui_col_idx = df_to_write.columns.get_loc('Avg RUI') + 1
-                        avg_rui_col_letter = get_column_letter(avg_rui_col_idx)
-                        avg_rui_cell_range = f"{avg_rui_col_letter}2:{avg_rui_col_letter}{len(df_to_write)+1}"
-                        
-                        worksheet.conditional_formatting.add(
-                            avg_rui_cell_range,
-                            ColorScaleRule(
-                                start_type='num', start_value=0, start_color=red,
-                                mid_type='num', mid_value=40, mid_color=yellow,
-                                end_type='num', end_value=100, end_color=green
+                        try:
+                            avg_rui_col_idx = df_to_write.columns.get_loc('Avg RUI') + 1
+                            avg_rui_col_letter = get_column_letter(avg_rui_col_idx)
+                            avg_rui_cell_range = f"{avg_rui_col_letter}2:{avg_rui_col_letter}{len(df_to_write)+1}"
+                            
+                            worksheet.conditional_formatting.add(
+                                avg_rui_cell_range,
+                                ColorScaleRule(
+                                    start_type='num', start_value=0, start_color=red,
+                                    mid_type='num', mid_value=40, mid_color=yellow,
+                                    end_type='num', end_value=100, end_color=green
+                                )
                             )
-                        )
+                        except Exception as e:
+                            # Skip formatting if there's an issue
+                            pass
                     
                     # Highlight High Risk count
                     if 'High Risk' in df_to_write.columns:
                         high_risk_col_idx = df_to_write.columns.get_loc('High Risk') + 1
                         for row in range(2, len(df_to_write) + 2):
                             cell = worksheet.cell(row=row, column=high_risk_col_idx)
-                            if cell.value and int(cell.value) > 0:
-                                cell.font = Font(color='FF0000', bold=True)
+                            try:
+                                # Try to convert to int, skip if not possible
+                                if cell.value is not None and pd.notna(cell.value):
+                                    value = int(float(str(cell.value)))
+                                    if value > 0:
+                                        cell.font = Font(color='FF0000', bold=True)
+                            except (ValueError, TypeError):
+                                # Skip non-numeric values
+                                pass
                 
                 wrote_any = wrote_any or not df_to_write.empty
             self.update_status("5a2. Writing data sheets...")
