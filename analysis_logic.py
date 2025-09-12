@@ -599,6 +599,57 @@ class CopilotAnalyzer:
         self.update_status("Usage complexity trend calculated.")
         return trend_df
 
+    def style_excel_sheet_with_offset(self, worksheet, df, row_offset=0):
+        """Style sheet with row offset for when rows have been inserted"""
+        # Always format headers, even for empty sheets
+        if len(df.columns) == 0: return
+        
+        from openpyxl.styles import PatternFill, Font, Alignment
+        from openpyxl.formatting.rule import ColorScaleRule, DataBarRule
+        from openpyxl.utils import get_column_letter
+        
+        # Headers are still at row 1
+        header_fill = PatternFill(start_color="2d3748", end_color="2d3748", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+        for col_num, column_title in enumerate(df.columns, 1):
+            cell = worksheet.cell(row=1, column=col_num)
+            cell.fill, cell.font, cell.alignment = header_fill, header_font, Alignment(horizontal='center')
+        
+        # Data now starts at row 3 (after disclaimer) instead of row 2
+        data_start_row = 2 + row_offset
+        
+        # Only apply row striping if there's data
+        if not df.empty:
+            stripe_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
+            for row_index in range(data_start_row + 1, len(df) + data_start_row + 1):
+                if row_index % 2 == 0:
+                    for col_index in range(1, len(df.columns) + 1):
+                        worksheet.cell(row=row_index, column=col_index).fill = stripe_fill
+        
+        # Set column widths
+        for col_num, column_title in enumerate(df.columns, 1):
+            max_length = len(str(column_title))
+            if not df.empty:
+                for cell_value in df[column_title]:
+                    if len(str(cell_value)) > max_length: max_length = len(str(cell_value))
+            worksheet.column_dimensions[get_column_letter(col_num)].width = max_length + 2
+        
+        # Apply conditional formatting with offset
+        if not df.empty:
+            red, yellow, green = "F8696B", "FFEB84", "63BE7B"
+            if 'Engagement Score' in df.columns:
+                col_letter = get_column_letter(df.columns.get_loc('Engagement Score') + 1)
+                cell_range = f"{col_letter}{data_start_row + 1}:{col_letter}{len(df) + data_start_row}"
+                worksheet.conditional_formatting.add(cell_range, ColorScaleRule(start_type='min', start_color=red, mid_type='percentile', mid_value=50, mid_color=yellow, end_type='max', end_color=green))
+            if 'Adjusted Consistency (%)' in df.columns:
+                col_letter = get_column_letter(df.columns.get_loc('Adjusted Consistency (%)') + 1)
+                cell_range = f"{col_letter}{data_start_row + 1}:{col_letter}{len(df) + data_start_row}"
+                worksheet.conditional_formatting.add(cell_range, DataBarRule(start_type='min', end_type='max', color=green))
+            if 'Adoption Velocity' in df.columns:
+                col_letter = get_column_letter(df.columns.get_loc('Adoption Velocity') + 1)
+                cell_range = f"{col_letter}{data_start_row + 1}:{col_letter}{len(df) + data_start_row}"
+                worksheet.conditional_formatting.add(cell_range, ColorScaleRule(start_type='min', start_color=yellow, mid_type='percentile', mid_value=50, mid_color=yellow, end_type='max', end_color=green))
+    
     def style_excel_sheet(self, worksheet, df):
         # Always format headers, even for empty sheets
         if len(df.columns) == 0: return
@@ -647,7 +698,8 @@ class CopilotAnalyzer:
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             self.update_status("5a1. Setting up Excel workbook...")
-            cols = ['Global Rank', 'Email', 'Adjusted Consistency (%)', 'Overall Recency', 'Total Tools Used', 'Avg Tools / Report', 'Adoption Velocity', 'Tool Expansion Rate', 'Days Since License', 'Usage Trend', 'Engagement Score']
+            # Use the actual column name that exists in the dataframe
+            cols = ['Global Rank', 'Email', 'Adjusted Consistency (%)', 'Overall Recency', 'Usage Complexity', 'Avg Tools / Report', 'Adoption Velocity', 'Tool Expansion Rate', 'Days Since License', 'Usage Trend', 'Engagement Score']
             sheets = {
                 'Leaderboard': all_df.sort_values(by="Global Rank") if all_df is not None and not all_df.empty else pd.DataFrame(),
             }
@@ -746,7 +798,11 @@ class CopilotAnalyzer:
                     # Manager Summary has its own columns already defined
                     target_cols = df_local.columns.tolist()
                 else:
-                    target_cols = cols
+                    # For Leaderboard and other sheets, use the cols list
+                    # But update it to use the renamed column
+                    target_cols = ['Global Rank', 'Email', 'Adjusted Consistency (%)', 'Overall Recency', 
+                                 'Total Tools Used', 'Avg Tools / Report', 'Adoption Velocity', 
+                                 'Tool Expansion Rate', 'Days Since License', 'Usage Trend', 'Engagement Score']
                 
                 # Ensure all target columns exist
                 for c in target_cols:
@@ -755,7 +811,10 @@ class CopilotAnalyzer:
                 
                 df_to_write = df_local[target_cols] if not df_local.empty else pd.DataFrame(columns=target_cols)
                 df_to_write.to_excel(writer, sheet_name=sheet_name, index=False, float_format="%.2f")
-                self.style_excel_sheet(writer.sheets[sheet_name], df_to_write)
+                
+                # For Leaderboard, apply styling AFTER adding disclaimer to get row positions right
+                if sheet_name != 'Leaderboard':
+                    self.style_excel_sheet(writer.sheets[sheet_name], df_to_write)
 
                 # Add disclaimer to Leaderboard
                 if sheet_name == 'Leaderboard':
@@ -781,6 +840,9 @@ class CopilotAnalyzer:
                     disclaimer_cell.fill = header_fill
                     disclaimer_cell.font = header_font
                     disclaimer_cell.alignment = Alignment(horizontal='center', vertical='center')
+                    
+                    # Now apply the regular styling with adjusted row positions
+                    self.style_excel_sheet_with_offset(writer.sheets[sheet_name], df_to_write, row_offset=1)
                 
                 # Add conditional formatting for RUI Analysis tab
                 if sheet_name == 'RUI Analysis' and 'RUI Score' in df_to_write.columns:
