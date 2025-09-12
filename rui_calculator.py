@@ -169,16 +169,37 @@ class RUICalculator:
                 continue
             
             # Parse manager chain
-            # Format: User -> Manager1 -> Manager2 -> ... -> CEO
+            # Format: ManagerLine contains Manager1 -> Manager2 -> ... -> CEO (user not included)
             managers = [m.strip() for m in manager_line.split('->')]
-            current_user = managers[0] if len(managers) > 0 else None
+            current_user_email = user.get('Email', '')
+            
+            # Extract user name from email for matching
+            if '@' in current_user_email:
+                # Convert email to likely name format for manager matching
+                user_name_parts = current_user_email.split('@')[0].replace('.', ' ').replace('x ', '').split()
+                # Capitalize each part
+                user_name_parts = [p.capitalize() for p in user_name_parts]
+                # Try different name formats
+                possible_names = [
+                    ' '.join(user_name_parts),  # First Last
+                    ' '.join(reversed(user_name_parts))  # Last First
+                ]
+            else:
+                possible_names = []
             
             # First, check if this user is a manager themselves
-            # Find all subordinates (people who have this user in their chain)
+            # Find all users who have this person as their immediate manager
             def has_user_as_manager(x):
                 if pd.isna(x) or '->' not in x:
                     return False
-                return current_user in x and current_user != x.split('->')[0].strip()
+                parts = [p.strip() for p in x.split('->')]
+                if len(parts) > 0:
+                    # Check if first position matches any possible name format
+                    first_manager = parts[0]
+                    for name in possible_names:
+                        if name.lower() in first_manager.lower() or first_manager.lower() in name.lower():
+                            return True
+                return False
             
             subordinates = df[df['ManagerLine'].apply(has_user_as_manager)]
             
@@ -187,24 +208,24 @@ class RUICalculator:
                 # Include self and subordinates
                 peer_group_indices = list(subordinates.index) + [idx]
                 peers = df.loc[peer_group_indices]
-                df.at[idx, 'peer_group'] = f"team_{current_user}"
+                df.at[idx, 'peer_group'] = f"team_{current_user_email}"
                 df.at[idx, 'peer_group_size'] = len(peers)
                 df.at[idx, 'peer_group_type'] = 'Self + Subordinates'
                 continue
             
             # Strategy 2: Direct peers under same manager (including their subordinates)
-            if len(managers) >= 2:
-                immediate_manager = managers[1]  # Position 1 is the immediate manager
+            if len(managers) >= 1:
+                immediate_manager = managers[0]  # Position 0 is the immediate manager
                 
-                # Find all users under immediate_manager (peers and their subordinates)
-                def under_immediate_manager(x):
+                # Find all users who have the same immediate manager
+                def has_same_immediate_manager(x):
                     if pd.isna(x) or '->' not in x:
                         return False
                     parts = [p.strip() for p in x.split('->')]
-                    # Check if immediate_manager appears anywhere after position 0
-                    return immediate_manager in parts[1:]
+                    # Check if position 0 (immediate manager) matches
+                    return len(parts) > 0 and parts[0] == immediate_manager
                 
-                peers = df[df['ManagerLine'].apply(under_immediate_manager)]
+                peers = df[df['ManagerLine'].apply(has_same_immediate_manager)]
                 
                 if len(peers) >= self.MIN_PEER_GROUP_SIZE:
                     df.at[idx, 'peer_group'] = f"direct_{immediate_manager}"
@@ -213,15 +234,15 @@ class RUICalculator:
                     continue
             
             # Strategy 3: Peers at same level (cousins - same skip-level manager)
-            if len(managers) >= 3:
-                skip_manager = managers[2]  # Position 2 is the skip-level manager
-                # Find users who report to any manager under skip_manager
+            if len(managers) >= 2:
+                skip_manager = managers[1]  # Position 1 is the skip-level manager
+                # Find users who have the same skip-level manager
                 def has_same_skip_manager(x):
                     if pd.isna(x) or '->' not in x:
                         return False
                     parts = [p.strip() for p in x.split('->')]
-                    if len(parts) >= 3:
-                        return parts[2] == skip_manager  # Check position 2
+                    if len(parts) >= 2:
+                        return parts[1] == skip_manager  # Check position 1
                     return False
                 
                 peers = df[df['ManagerLine'].apply(has_same_skip_manager)]
@@ -366,9 +387,9 @@ class RUICalculator:
         if 'ManagerLine' not in df.columns:
             return pd.DataFrame()
         
-        # Extract immediate manager (position 1 in the chain)
+        # Extract immediate manager (position 0 in the chain - first manager)
         df['immediate_manager'] = df['ManagerLine'].apply(
-            lambda x: x.split('->')[1].strip() if pd.notna(x) and '->' in x and len(x.split('->')) >= 2 else None
+            lambda x: x.split('->')[0].strip() if pd.notna(x) and '->' in x and len(x.split('->')) >= 1 else None
         )
         
         # Group by manager
