@@ -158,8 +158,9 @@ class RUICalculator:
         # This helps us exclude managers from being peers of their subordinates
         manager_to_subordinates = {}
         for _, row in df.iterrows():
-            if pd.notna(row.get('ManagerLine')) and row.get('ManagerLine'):
-                managers = [m.strip() for m in row['ManagerLine'].split('->')]
+            mgr_line = row.get('ManagerLine', '')
+            if pd.notna(mgr_line) and mgr_line != '':
+                managers = [m.strip() for m in mgr_line.split('->')]
                 if managers:
                     # First manager in the chain is the immediate manager
                     immediate_mgr = managers[0]
@@ -292,35 +293,33 @@ class RUICalculator:
                     df.at[idx, 'peer_group_type'] = 'Skip-Level Peers'
                     continue
             
-            # Strategy 4: Walk up the chain looking for sufficient peers at each level
+            # Strategy 4: Walk up the chain looking for sufficient peers under each manager
+            # This includes everyone under that manager, regardless of depth
             for i in range(len(managers) - 1, -1, -1):
                 manager = managers[i]
                 
-                # Find users at the same organizational level under this manager
-                manager_position = i
-                peers = df[df['ManagerLine'].apply(
-                    lambda x: (manager in x.split('->') and 
-                              x.split('->').index(manager) == manager_position)
-                    if pd.notna(x) and '->' in x else False
-                )]
+                # Find all users who have this manager anywhere in their chain
+                # This gives us everyone in that manager's organization
+                def has_manager_in_chain(x):
+                    if pd.isna(x):
+                        return False
+                    if x == manager:  # Direct report with no chain
+                        return True
+                    if '->' in x:
+                        parts = [p.strip() for p in x.split('->')]
+                        return manager in parts
+                    return False
                 
-                # Exclude all managers in the chain from being peers
-                manager_email_patterns = []
-                for mgr in managers[:i+1]:  # All managers up to this level
-                    manager_email_patterns.extend([
-                        mgr.lower().replace(' ', '.') + '@',
-                        mgr.lower().replace(' ', '.x.') + '@',
-                        mgr.lower().replace(' ', '_') + '@'
-                    ])
+                peers = df[df['ManagerLine'].apply(has_manager_in_chain)]
                 
-                # Filter out managers
-                for pattern in manager_email_patterns:
-                    peers = peers[~peers['Email'].str.lower().str.contains(pattern, na=False)]
+                # For organizational level groups, don't exclude managers
+                # Everyone at this level should be compared together
+                # (managers are valid peers at organizational levels)
                 
                 if len(peers) >= self.MIN_PEER_GROUP_SIZE:
                     df.at[idx, 'peer_group'] = f"level_{manager}"
                     df.at[idx, 'peer_group_size'] = len(peers)
-                    df.at[idx, 'peer_group_type'] = f'Org Level {len(managers) - i}'
+                    df.at[idx, 'peer_group_type'] = f'Org Level {i + 1}'
                     break
             
             # If no suitable manager group found, use department or global
@@ -448,15 +447,17 @@ class RUICalculator:
         # Build manager hierarchy mapping
         manager_hierarchy = {}
         for _, row in df.iterrows():
-            if pd.notna(row.get('ManagerLine')) and row.get('ManagerLine'):
-                managers = [m.strip() for m in row['ManagerLine'].split('->')]
+            mgr_line = row.get('ManagerLine', '')
+            if pd.notna(mgr_line) and mgr_line != '':
+                managers = [m.strip() for m in mgr_line.split('->')]
                 # Store the full chain for each user
                 manager_hierarchy[row['Email']] = managers
         
         # For each user, find the appropriate management level for reporting
         for idx, row in df.iterrows():
-            if pd.notna(row.get('ManagerLine')) and row.get('ManagerLine'):
-                managers = [m.strip() for m in row['ManagerLine'].split('->')]
+            mgr_line = row.get('ManagerLine', '')
+            if pd.notna(mgr_line) and mgr_line != '':
+                managers = [m.strip() for m in mgr_line.split('->')]
                 
                 # Start from immediate manager and work up
                 for i, manager in enumerate(managers):
