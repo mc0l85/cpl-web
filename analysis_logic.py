@@ -27,6 +27,7 @@ class CopilotAnalyzer:
         self.sid = sid
         self.full_usage_data = None
         self.utilized_metrics_df = None
+        self.target_df = None
 
     def update_status(self, message):
         self.socketio.emit('status_update', {'message': message}, to=self.sid)
@@ -106,9 +107,14 @@ class CopilotAnalyzer:
             utilized_emails = set(usage_df['User Principal Name'].unique())
             # Store the original count from usage files
             original_usage_count = len(utilized_emails)
+            
+            # Store target_df for later use with RUI
+            self.target_df = None
+            
             if target_user_path:
                 self.update_status("Applying filters...")
                 target_df = pd.read_csv(target_user_path, encoding='utf-8-sig')
+                self.target_df = target_df.copy()  # Store for RUI calculation
 
                 if filters.get('companies'):
                     vals = set([v.lower() for v in filters['companies']])
@@ -376,13 +382,8 @@ class CopilotAnalyzer:
             self.update_status("3a. Calculating Relative Use Index (RUI) scores...")
             rui_calculator = RUICalculator(self.reference_date)
             
-            # Load manager data if available
-            manager_df = None
-            if target_user_path:
-                try:
-                    manager_df = pd.read_csv(target_user_path, encoding='utf-8-sig')
-                except:
-                    pass
+            # Use already loaded target_df instead of re-reading the file
+            manager_df = self.target_df
             
             # Calculate RUI scores
             self.utilized_metrics_df = rui_calculator.calculate_rui_scores(
