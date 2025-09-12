@@ -293,33 +293,22 @@ class RUICalculator:
                     df.at[idx, 'peer_group_type'] = 'Skip-Level Peers'
                     continue
             
-            # Strategy 4: Walk up the chain looking for sufficient peers under each manager
-            # This includes everyone under that manager, regardless of depth
-            for i in range(len(managers) - 1, -1, -1):
+            # Strategy 4: Walk up the chain to find the right organizational group
+            # For each manager in the chain, check if their organization has 5+ people
+            for i in range(len(managers)):
                 manager = managers[i]
                 
-                # Find all users who have this manager anywhere in their chain
-                # This gives us everyone in that manager's organization
-                def has_manager_in_chain(x):
-                    if pd.isna(x):
-                        return False
-                    if x == manager:  # Direct report with no chain
-                        return True
-                    if '->' in x:
-                        parts = [p.strip() for p in x.split('->')]
-                        return manager in parts
-                    return False
+                # Find ALL users who have this manager ANYWHERE in their chain
+                # This includes everyone in that manager's organization tree
+                peers = df[df['ManagerLine'].apply(
+                    lambda x: manager in str(x).split(' -> ') if pd.notna(x) else False
+                )]
                 
-                peers = df[df['ManagerLine'].apply(has_manager_in_chain)]
-                
-                # For organizational level groups, don't exclude managers
-                # Everyone at this level should be compared together
-                # (managers are valid peers at organizational levels)
-                
+                # If this manager's org has 5+ people, use it as the peer group
                 if len(peers) >= self.MIN_PEER_GROUP_SIZE:
-                    df.at[idx, 'peer_group'] = f"level_{manager}"
+                    df.at[idx, 'peer_group'] = f"org_{manager}"
                     df.at[idx, 'peer_group_size'] = len(peers)
-                    df.at[idx, 'peer_group_type'] = f'Org Level {i + 1}'
+                    df.at[idx, 'peer_group_type'] = f'Organization - {manager}'
                     break
             
             # If no suitable manager group found, use department or global
