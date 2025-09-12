@@ -38,10 +38,12 @@ After reviewing your current implementation and the proposed Relative Use Index 
    - Min-breadth of 2.0 for "good standing"
    - Minimum peer group size: 5 users
 
-3. **Peer Group Formation**
-   - Primary: Manager's direct reports (minimum 5 users)
-   - Fallback: Walk up management chain until 5+ peers found
-   - Ultimate fallback: Global comparison (only for C-suite)
+3. **Peer Group Formation (UPDATED)**
+   - Primary: Direct team comparison (5+ users under same manager)
+   - Strategy 2: Skip-level peers (cousins under same skip-level manager)
+   - Strategy 3: Organizational unit (all users under common manager at any level)
+   - Managers excluded from subordinate peer groups (no comparing with your boss)
+   - Ultimate fallback: Department or global (rare cases only)
 
 ### 🔄 **Migration Path Recommendations**
 
@@ -64,10 +66,13 @@ After reviewing your current implementation and the proposed Relative Use Index 
 
 **Strongly recommend implementation** with these specifications:
 
-1. **Peer Group Logic**:
-   - Use manager's direct reports as primary peer group (minimum 5 users)
-   - If <5, walk up management chain until sufficient peers found
-   - Only use global comparison for C-suite edge cases
+1. **Peer Group Logic (IMPLEMENTED)**:
+   - Strategy 1: Self + direct subordinates (for managers with 5+ reports)
+   - Strategy 2: Direct manager's team (5+ peers under same manager, excluding manager)
+   - Strategy 3: Skip-level peers (5+ cousins under same skip-level manager)
+   - Strategy 4: Organizational unit (walk up chain to find 5+ users under common manager)
+   - Managers never counted as peers of their subordinates (James Peterson ≠ Mark Rothfuss's peer)
+   - Consistent peer group sizes for all members of same group
 
 2. **RUI Thresholds**:
    - New Users (< 90 days): Automatic grace period, protected from reclamation
@@ -83,6 +88,28 @@ After reviewing your current implementation and the proposed Relative Use Index 
 
 The manager-based peer group approach ensures fair comparisons between users with similar tool usage expectations, while the automatic escalation handles edge cases elegantly. This is significantly fairer than the current binary system while remaining simple to explain and implement.
 
+### 🔧 **Recent Improvements & Bug Fixes**
+
+1. **Peer Group Formation Fixed**:
+   - Mark Rothfuss correctly groups with ~11 people under Peter Obasa (not 273 globally)
+   - Managers properly excluded from subordinate peer groups
+   - Consistent peer group sizes for all members
+
+2. **Manager Report Aggregation**:
+   - Automatically aggregates small teams to meaningful groups (5+ users)
+   - Shows organizational level (Direct Manager, Skip-Level, Department)
+   - Eliminates single-person manager entries
+
+3. **Excel Formatting Cleaned**:
+   - Removed unintended neon green backgrounds in Leaderboard column D
+   - Fixed red text appearing in column E
+   - Maintains proper alternating row striping
+
+4. **Edge Case Handling**:
+   - 90-day grace period properly applied to new users
+   - Manager hierarchy correctly parsed (ManagerLine doesn't include user)
+   - Peer group escalation stops at appropriate organizational level
+
 ### 📈 **Reporting Structure for Regional Leaders**
 
 **New "RUI Analysis" Tab in Excel Report:**
@@ -93,12 +120,14 @@ The manager-based peer group approach ensures fair comparisons between users wit
 | Amy | Jane S. | 28 | Medium - Review | Yesterday | 6 of 8 | → |
 | Sue | Jane S. | 68 | Low - Retain | Today | 2 of 8 | ↑ |
 
-**Manager Summary View:**
+**Manager Summary View (ENHANCED):**
 
-| Manager Name | Team Size | Avg RUI | High Risk | Medium Risk | Low Risk | New Users | Action Required |
-|--------------|-----------|---------|-----------|-------------|----------|-----------|-----------------|
-| Jane Smith | 8 | 52 | 1 | 2 | 3 | 2 | 1 |
-| John Doe | 6 | 38 | 2 | 2 | 1 | 1 | 2 |
+| Manager/Group | Org Level | Team Size | Avg RUI | High Risk | Medium Risk | Low Risk | New Users | Action Required |
+|---------------|-----------|-----------|---------|-----------|-------------|----------|-----------|-----------------|
+| Peter Obasa | Department | 11 | 52 | 1 | 2 | 6 | 2 | 1 |
+| Dan Basile | Skip-Level | 8 | 38 | 2 | 2 | 3 | 1 | 2 |
+
+*Note: Report aggregates to meaningful group sizes (5+ users) to avoid single-person entries*
 
 **License Risk Categories:**
 - **New User (< 90 days)**: Protected grace period for onboarding
@@ -144,10 +173,20 @@ RUI combines four factors to create a single score:
 **Important**: New users (less than 90 days since first appearance) are automatically protected during their learning period, regardless of RUI score.
 
 ### Why Peer Comparison?
-You're compared to others who report to the same manager because:
-- Your team has similar tool needs
-- Your manager sets similar expectations
-- It's fairer than comparing engineers to admins
+You're compared to others in your organizational unit because:
+- Your team has similar tool needs and workflows
+- Your manager sets similar expectations for the team
+- It's fairer than comparing engineers to admins or sales to finance
+- The system finds the right comparison group (usually 5-15 people at your organizational level)
+
+### How Are Peer Groups Formed?
+The system automatically finds the right comparison group for you:
+1. **First**: Looks at your immediate manager's team
+2. **If too small**: Includes your organizational cousins (people at your level)
+3. **If still too small**: Expands to your department or division
+4. **Goal**: Find 5-15 people with similar roles and expectations
+
+**Note**: Your manager is never included as your peer - you're compared with colleagues, not supervisors.
 
 ### Example:
 *"Sarah has an RUI of 35 (Medium Risk). She ranks 5 out of 7 on her team. While she used tools yesterday, her overall frequency and breadth are below her peers. She'll receive a reminder to increase her usage."*
