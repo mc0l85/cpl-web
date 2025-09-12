@@ -154,6 +154,19 @@ class RUICalculator:
             df['peer_group_type'] = 'Global'
             return df
         
+        # Build a mapping of who manages whom
+        # This helps us exclude managers from being peers of their subordinates
+        manager_to_subordinates = {}
+        for _, row in df.iterrows():
+            if pd.notna(row.get('ManagerLine')) and row.get('ManagerLine'):
+                managers = [m.strip() for m in row['ManagerLine'].split('->')]
+                if managers:
+                    # First manager in the chain is the immediate manager
+                    immediate_mgr = managers[0]
+                    if immediate_mgr not in manager_to_subordinates:
+                        manager_to_subordinates[immediate_mgr] = []
+                    manager_to_subordinates[immediate_mgr].append(row.get('Email', ''))
+        
         # Process each user to find appropriate peer group
         for idx, user in df.iterrows():
             manager_line = user.get('ManagerLine', '')
@@ -213,7 +226,7 @@ class RUICalculator:
                 df.at[idx, 'peer_group_type'] = 'Self + Subordinates'
                 continue
             
-            # Strategy 2: Direct peers under same manager (including their subordinates)
+            # Strategy 2: Direct peers under same manager (excluding the manager themselves)
             if len(managers) >= 1:
                 immediate_manager = managers[0]  # Position 0 is the immediate manager
                 
@@ -225,12 +238,25 @@ class RUICalculator:
                     # Check if position 0 (immediate manager) matches
                     return len(parts) > 0 and parts[0] == immediate_manager
                 
+                # Get peers with same manager, but exclude the manager if they're in the dataset
                 peers = df[df['ManagerLine'].apply(has_same_immediate_manager)]
+                
+                # Important: Exclude the manager themselves from the peer group
+                # Check if immediate_manager appears as a user (by checking email patterns)
+                manager_email_patterns = [
+                    immediate_manager.lower().replace(' ', '.') + '@',
+                    immediate_manager.lower().replace(' ', '.x.') + '@',
+                    immediate_manager.lower().replace(' ', '_') + '@'
+                ]
+                
+                # Filter out the manager if they exist in the peers
+                for pattern in manager_email_patterns:
+                    peers = peers[~peers['Email'].str.lower().str.contains(pattern, na=False)]
                 
                 if len(peers) >= self.MIN_PEER_GROUP_SIZE:
                     df.at[idx, 'peer_group'] = f"direct_{immediate_manager}"
                     df.at[idx, 'peer_group_size'] = len(peers)
-                    df.at[idx, 'peer_group_type'] = 'Manager Team + Subs'
+                    df.at[idx, 'peer_group_type'] = 'Direct Manager Team'
                     continue
             
             # Strategy 3: Peers at same level (cousins - same skip-level manager)
@@ -247,13 +273,26 @@ class RUICalculator:
                 
                 peers = df[df['ManagerLine'].apply(has_same_skip_manager)]
                 
+                # Exclude both immediate and skip-level managers from peer group
+                manager_email_patterns = []
+                for mgr in [managers[0], skip_manager]:
+                    manager_email_patterns.extend([
+                        mgr.lower().replace(' ', '.') + '@',
+                        mgr.lower().replace(' ', '.x.') + '@',
+                        mgr.lower().replace(' ', '_') + '@'
+                    ])
+                
+                # Filter out managers
+                for pattern in manager_email_patterns:
+                    peers = peers[~peers['Email'].str.lower().str.contains(pattern, na=False)]
+                
                 if len(peers) >= self.MIN_PEER_GROUP_SIZE:
                     df.at[idx, 'peer_group'] = f"skip_{skip_manager}"
                     df.at[idx, 'peer_group_size'] = len(peers)
                     df.at[idx, 'peer_group_type'] = 'Skip-Level Peers'
                     continue
             
-            # Strategy 3: Walk up the chain looking for sufficient peers at each level
+            # Strategy 4: Walk up the chain looking for sufficient peers at each level
             for i in range(len(managers) - 1, -1, -1):
                 manager = managers[i]
                 
@@ -264,6 +303,19 @@ class RUICalculator:
                               x.split('->').index(manager) == manager_position)
                     if pd.notna(x) and '->' in x else False
                 )]
+                
+                # Exclude all managers in the chain from being peers
+                manager_email_patterns = []
+                for mgr in managers[:i+1]:  # All managers up to this level
+                    manager_email_patterns.extend([
+                        mgr.lower().replace(' ', '.') + '@',
+                        mgr.lower().replace(' ', '.x.') + '@',
+                        mgr.lower().replace(' ', '_') + '@'
+                    ])
+                
+                # Filter out managers
+                for pattern in manager_email_patterns:
+                    peers = peers[~peers['Email'].str.lower().str.contains(pattern, na=False)]
                 
                 if len(peers) >= self.MIN_PEER_GROUP_SIZE:
                     df.at[idx, 'peer_group'] = f"level_{manager}"
@@ -383,29 +435,71 @@ class RUICalculator:
         return df
     
     def get_manager_summary(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Create manager-level summary statistics"""
+        """Create manager-level summary statistics, aggregating small teams to meaningful groups"""
         if 'ManagerLine' not in df.columns:
             return pd.DataFrame()
         
-        # Extract immediate manager (position 0 in the chain - first manager)
-        df['immediate_manager'] = df['ManagerLine'].apply(
-            lambda x: x.split('->')[0].strip() if pd.notna(x) and '->' in x and len(x.split('->')) >= 1 else None
-        )
+        # Create a copy to work with
+        df = df.copy()
         
-        # Group by manager
-        summary = df.groupby('immediate_manager').agg({
+        # Determine the effective manager for each user (lowest level that gets 5+ users)
+        df['effective_manager'] = None
+        
+        # Build manager hierarchy mapping
+        manager_hierarchy = {}
+        for _, row in df.iterrows():
+            if pd.notna(row.get('ManagerLine')) and row.get('ManagerLine'):
+                managers = [m.strip() for m in row['ManagerLine'].split('->')]
+                # Store the full chain for each user
+                manager_hierarchy[row['Email']] = managers
+        
+        # For each user, find the appropriate management level for reporting
+        for idx, row in df.iterrows():
+            if pd.notna(row.get('ManagerLine')) and row.get('ManagerLine'):
+                managers = [m.strip() for m in row['ManagerLine'].split('->')]
+                
+                # Start from immediate manager and work up
+                for i, manager in enumerate(managers):
+                    # Count how many users report to this manager at any level
+                    users_under_manager = 0
+                    for _, other_row in df.iterrows():
+                        if pd.notna(other_row.get('ManagerLine')) and manager in other_row.get('ManagerLine', ''):
+                            # Check if this manager appears at the same position in their chain
+                            other_managers = [m.strip() for m in other_row['ManagerLine'].split('->')]
+                            if i < len(other_managers) and other_managers[i] == manager:
+                                users_under_manager += 1
+                    
+                    # If this manager has 5+ users, use them as the effective manager
+                    if users_under_manager >= self.MIN_PEER_GROUP_SIZE:
+                        df.at[idx, 'effective_manager'] = manager
+                        df.at[idx, 'management_level'] = i
+                        break
+                
+                # If no manager has 5+ users, use the highest level available
+                if df.at[idx, 'effective_manager'] is None and managers:
+                    df.at[idx, 'effective_manager'] = managers[-1]  # Top of chain
+                    df.at[idx, 'management_level'] = len(managers) - 1
+            else:
+                # No manager line - mark as CEO/Top
+                df.at[idx, 'effective_manager'] = 'No Manager Data'
+                df.at[idx, 'management_level'] = -1
+        
+        # Group by effective manager
+        summary = df.groupby('effective_manager').agg({
             'Email': 'count',
             'rui_score': 'mean',
-            'license_risk': lambda x: (x.str.startswith('High')).sum()
+            'license_risk': lambda x: (x.str.startswith('High')).sum(),
+            'management_level': 'min'  # Get the lowest management level for this group
         }).rename(columns={
             'Email': 'team_size',
             'rui_score': 'avg_rui',
-            'license_risk': 'high_risk_count'
+            'license_risk': 'high_risk_count',
+            'management_level': 'mgmt_level'
         })
         
         # Add medium and low risk counts
         for manager in summary.index:
-            manager_df = df[df['immediate_manager'] == manager]
+            manager_df = df[df['effective_manager'] == manager]
             summary.loc[manager, 'medium_risk_count'] = (
                 manager_df['license_risk'].str.startswith('Medium')
             ).sum()
@@ -419,19 +513,33 @@ class RUICalculator:
             summary.loc[manager, 'action_required'] = (
                 summary.loc[manager, 'high_risk_count']
             )
+            
+            # Add organization level descriptor
+            level = summary.loc[manager, 'mgmt_level']
+            if level == -1:
+                summary.loc[manager, 'org_level'] = 'No Data'
+            elif level == 0:
+                summary.loc[manager, 'org_level'] = 'Direct Manager'
+            elif level == 1:
+                summary.loc[manager, 'org_level'] = 'Skip-Level'
+            elif level == 2:
+                summary.loc[manager, 'org_level'] = 'Department'
+            else:
+                summary.loc[manager, 'org_level'] = f'Level {level+1}'
         
         summary = summary.reset_index()
         
         # Ensure correct column order and types
         summary = summary.rename(columns={
-            'immediate_manager': 'Manager Name',
+            'effective_manager': 'Manager/Group',
             'team_size': 'Team Size',
             'avg_rui': 'Avg RUI',
             'high_risk_count': 'High Risk',
             'medium_risk_count': 'Medium Risk',
             'low_risk_count': 'Low Risk',
             'new_user_count': 'New Users',
-            'action_required': 'Action Required'
+            'action_required': 'Action Required',
+            'org_level': 'Org Level'
         })
         
         # Ensure numeric columns are integers
@@ -439,8 +547,22 @@ class RUICalculator:
             if col in summary.columns:
                 summary[col] = summary[col].fillna(0).astype(int)
         
+        # Only include groups with 5+ users (unless there are no such groups)
+        large_groups = summary[summary['Team Size'] >= self.MIN_PEER_GROUP_SIZE]
+        if len(large_groups) > 0:
+            summary = large_groups
+        
         # Sort by action required, then avg RUI
         summary = summary.sort_values(['Action Required', 'Avg RUI'], 
                                     ascending=[False, True])
+        
+        # Drop the internal mgmt_level column
+        if 'mgmt_level' in summary.columns:
+            summary = summary.drop('mgmt_level', axis=1)
+        
+        # Reorder columns for better readability
+        column_order = ['Manager/Group', 'Org Level', 'Team Size', 'Avg RUI', 
+                       'High Risk', 'Medium Risk', 'Low Risk', 'New Users', 'Action Required']
+        summary = summary[[col for col in column_order if col in summary.columns]]
         
         return summary
