@@ -763,6 +763,26 @@ class CopilotAnalyzer:
                     disclaimer_cell.fill = header_fill
                     disclaimer_cell.font = header_font
                     disclaimer_cell.alignment = Alignment(horizontal='center', vertical='center')
+                    
+                    # Clear any unintended formatting on columns D and E
+                    # Column D (Overall Recency) and E (Total Tools Used) should not have special formatting
+                    if 'Overall Recency' in df_to_write.columns:
+                        recency_col_idx = df_to_write.columns.get_loc('Overall Recency') + 1
+                        for row in range(3, len(df_to_write) + 3):  # Start at row 3 due to disclaimer
+                            cell = worksheet.cell(row=row, column=recency_col_idx)
+                            # Remove any fill that might have been incorrectly applied
+                            if row % 2 == 0:  # Keep alternating row stripes
+                                cell.fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
+                            else:
+                                cell.fill = PatternFill(fill_type=None)  # No fill for odd rows
+                            cell.font = Font(color="000000")  # Black text
+                    
+                    if 'Total Tools Used' in df_to_write.columns:
+                        tools_col_idx = df_to_write.columns.get_loc('Total Tools Used') + 1
+                        for row in range(3, len(df_to_write) + 3):  # Start at row 3 due to disclaimer
+                            cell = worksheet.cell(row=row, column=tools_col_idx)
+                            # Ensure normal black text, not red
+                            cell.font = Font(color="000000")
                 
                 # Add conditional formatting for RUI Analysis tab
                 if sheet_name == 'RUI Analysis' and 'RUI Score' in df_to_write.columns:
