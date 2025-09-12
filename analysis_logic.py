@@ -721,6 +721,37 @@ class CopilotAnalyzer:
             
             for sheet_name, df in sheets.items():
                 df_local = df.copy()
+                
+                # Fix for alternating empty rows issue
+                # Check if the dataframe has alternating empty rows and remove them
+                if not df_local.empty:
+                    empty_mask = df_local.isna().all(axis=1)
+                    if empty_mask.sum() > 0:
+                        # Check for alternating pattern (every odd row is empty)
+                        has_alternating = True
+                        total_rows = len(df_local)
+                        # Quick check: if about half the rows are empty, might be alternating
+                        if empty_mask.sum() > total_rows * 0.4 and empty_mask.sum() < total_rows * 0.6:
+                            # Verify alternating pattern
+                            for i in range(0, min(10, total_rows), 2):
+                                if empty_mask.iloc[i]:  # Even index should have data
+                                    has_alternating = False
+                                    break
+                            if has_alternating:
+                                for i in range(1, min(10, total_rows), 2):
+                                    if not empty_mask.iloc[i]:  # Odd index should be empty
+                                        has_alternating = False
+                                        break
+                        else:
+                            has_alternating = False
+                        
+                        if has_alternating:
+                            print(f"WARNING: Sheet '{sheet_name}' has alternating empty rows. Removing {empty_mask.sum()} empty rows...")
+                            df_local = df_local[~empty_mask].reset_index(drop=True)
+                        elif empty_mask.sum() > 0:
+                            print(f"INFO: Sheet '{sheet_name}' has {empty_mask.sum()} empty rows. Removing them...")
+                            df_local = df_local[~empty_mask].reset_index(drop=True)
+                
                 # Rename columns for display
                 for old_name, new_name in col_display_map.items():
                     if old_name in df_local.columns:
@@ -785,7 +816,8 @@ class CopilotAnalyzer:
                             # For other missing columns, fill with NaN
                             df_local[c] = pd.Series([np.nan]*len(df_local))
                 
-                df_to_write = df_local[target_cols] if not df_local.empty else pd.DataFrame(columns=target_cols)
+                # Create a proper copy to avoid SettingWithCopyWarning and data corruption
+                df_to_write = df_local[target_cols].copy() if not df_local.empty else pd.DataFrame(columns=target_cols)
                 
                 # Ensure proper data types for critical columns
                 if 'Overall Recency' in df_to_write.columns:
