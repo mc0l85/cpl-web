@@ -171,28 +171,48 @@ class RUICalculator:
             # Parse manager chain
             # Format: User -> Manager1 -> Manager2 -> ... -> CEO
             managers = [m.strip() for m in manager_line.split('->')]
+            current_user = managers[0] if len(managers) > 0 else None
             
-            # Strategy 1: Direct reports of same immediate manager
+            # First, check if this user is a manager themselves
+            # Find all subordinates (people who have this user in their chain)
+            def has_user_as_manager(x):
+                if pd.isna(x) or '->' not in x:
+                    return False
+                return current_user in x and current_user != x.split('->')[0].strip()
+            
+            subordinates = df[df['ManagerLine'].apply(has_user_as_manager)]
+            
+            # Strategy 1: Self + direct reports if user is a manager
+            if len(subordinates) >= self.MIN_PEER_GROUP_SIZE - 1:
+                # Include self and subordinates
+                peer_group_indices = list(subordinates.index) + [idx]
+                peers = df.loc[peer_group_indices]
+                df.at[idx, 'peer_group'] = f"team_{current_user}"
+                df.at[idx, 'peer_group_size'] = len(peers)
+                df.at[idx, 'peer_group_type'] = 'Self + Subordinates'
+                continue
+            
+            # Strategy 2: Direct peers under same manager (including their subordinates)
             if len(managers) >= 2:
                 immediate_manager = managers[1]  # Position 1 is the immediate manager
-                # Find users who have the exact same immediate manager
-                def has_same_manager(x):
+                
+                # Find all users under immediate_manager (peers and their subordinates)
+                def under_immediate_manager(x):
                     if pd.isna(x) or '->' not in x:
                         return False
                     parts = [p.strip() for p in x.split('->')]
-                    if len(parts) >= 2:
-                        return parts[1] == immediate_manager  # Check position 1
-                    return False
+                    # Check if immediate_manager appears anywhere after position 0
+                    return immediate_manager in parts[1:]
                 
-                peers = df[df['ManagerLine'].apply(has_same_manager)]
+                peers = df[df['ManagerLine'].apply(under_immediate_manager)]
                 
                 if len(peers) >= self.MIN_PEER_GROUP_SIZE:
                     df.at[idx, 'peer_group'] = f"direct_{immediate_manager}"
                     df.at[idx, 'peer_group_size'] = len(peers)
-                    df.at[idx, 'peer_group_type'] = 'Direct Manager Team'
+                    df.at[idx, 'peer_group_type'] = 'Manager Team + Subs'
                     continue
             
-            # Strategy 2: Peers at same level (cousins - same skip-level manager)
+            # Strategy 3: Peers at same level (cousins - same skip-level manager)
             if len(managers) >= 3:
                 skip_manager = managers[2]  # Position 2 is the skip-level manager
                 # Find users who report to any manager under skip_manager
