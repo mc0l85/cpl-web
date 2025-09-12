@@ -18,6 +18,7 @@ from openpyxl.drawing.colors import ColorChoice # Import ColorChoice
 from openpyxl.styles.colors import Color
 from datetime import datetime
 import config
+from rui_calculator import RUICalculator
 
 
 class CopilotAnalyzer:
@@ -371,12 +372,35 @@ class CopilotAnalyzer:
             self.utilized_metrics_df['Justification'] = self.utilized_metrics_df.apply(self.get_justification, axis=1)
             reallocation_df, under_utilized_df, top_utilizers_df = self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'For Reallocation'], self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'Under-Utilized'], self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'Top Utilizer']
 
+            # Calculate RUI scores if manager data is available
+            self.update_status("3a. Calculating Relative Use Index (RUI) scores...")
+            rui_calculator = RUICalculator(self.reference_date)
+            
+            # Load manager data if available
+            manager_df = None
+            if target_user_path:
+                try:
+                    manager_df = pd.read_csv(target_user_path, encoding='utf-8-sig')
+                except:
+                    pass
+            
+            # Calculate RUI scores
+            self.utilized_metrics_df = rui_calculator.calculate_rui_scores(
+                self.utilized_metrics_df, 
+                manager_df
+            )
+            
+            # Generate manager summary if we have RUI scores
+            self.manager_summary_df = None
+            if 'rui_score' in self.utilized_metrics_df.columns:
+                self.manager_summary_df = rui_calculator.get_manager_summary(self.utilized_metrics_df)
+
             self.update_status("4. Calculating usage complexity over time...")
             usage_complexity_trend_df = self.calculate_usage_complexity_over_time(utilized_emails, filters, target_user_path)
 
             self.update_status("5. Generating reports in memory...")
             self.update_status("5a. Creating Excel report structure...")
-            excel_bytes = self.create_excel_report(top_utilizers_df, under_utilized_df, reallocation_df, self.utilized_metrics_df, usage_complexity_trend_df)
+            excel_bytes = self.create_excel_report(top_utilizers_df, under_utilized_df, reallocation_df, self.utilized_metrics_df, usage_complexity_trend_df, self.manager_summary_df)
             self.update_status("5b. Generating leaderboard HTML...")
             leaderboard_html = self.create_leaderboard_html(self.utilized_metrics_df)
             self.update_status("5c. Finalizing reports...")
@@ -618,7 +642,7 @@ class CopilotAnalyzer:
                 cell_range = f"{col_letter}2:{col_letter}{len(df)+1}"
                 worksheet.conditional_formatting.add(cell_range, ColorScaleRule(start_type='min', start_color=yellow, mid_type='percentile', mid_value=50, mid_color=yellow, end_type='max', end_color=green))
 
-    def create_excel_report(self, top_df, under_df, realloc_df, all_df=None, usage_complexity_trend_df=None):
+    def create_excel_report(self, top_df, under_df, realloc_df, all_df=None, usage_complexity_trend_df=None, manager_summary_df=None):
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             self.update_status("5a1. Setting up Excel workbook...")
@@ -643,6 +667,20 @@ class CopilotAnalyzer:
                     else:
                         # Create empty dataframe with same columns as all_df
                         sheets[f'No Use {days}d'] = pd.DataFrame(columns=all_df.columns)
+            
+            # Add RUI Analysis tabs if RUI data is available
+            if all_df is not None and 'rui_score' in all_df.columns:
+                # RUI Analysis tab with individual scores
+                rui_df = all_df.copy()
+                rui_df['Last Active'] = pd.to_datetime(rui_df['Overall Recency']).apply(
+                    lambda x: f"{(self.reference_date - x).days} days ago" if pd.notna(x) else "Never"
+                )
+                sheets['RUI Analysis'] = rui_df.sort_values('rui_score', ascending=True)
+                
+                # Manager Summary tab if available
+                if manager_summary_df is not None and not manager_summary_df.empty:
+                    sheets['Manager Summary'] = manager_summary_df
+            
             wrote_any = False
             
             # Create all category sheets first
@@ -654,6 +692,12 @@ class CopilotAnalyzer:
             # Define columns for No Use tabs (subset of main columns)
             no_use_cols = ['Global Rank', 'Email', 'Overall Recency', 'Avg Tools / Report', 'Days Since License', 'Usage Trend']
             
+            # Define columns for RUI Analysis tab
+            rui_cols = ['Email', 'rui_score', 'license_risk', 'Last Active', 'peer_rank_display', 
+                       'trend_arrow', 'immediate_manager', 'Department', 'peer_group_type']
+            
+            # Manager Summary tab uses its own columns
+            
             for sheet_name, df in sheets.items():
                 df_local = df.copy()
                 # Rename columns for display
@@ -661,9 +705,27 @@ class CopilotAnalyzer:
                     if old_name in df_local.columns:
                         df_local = df_local.rename(columns={old_name: new_name})
                 
-                # Use different column sets for No Use tabs vs other tabs
+                # Use different column sets for different tabs
                 if sheet_name.startswith('No Use'):
                     target_cols = no_use_cols
+                elif sheet_name == 'RUI Analysis':
+                    target_cols = rui_cols
+                    # Rename RUI columns for better display
+                    df_local = df_local.rename(columns={
+                        'rui_score': 'RUI Score',
+                        'license_risk': 'License Risk',
+                        'Last Active': 'Last Active',
+                        'peer_rank_display': 'Peer Rank',
+                        'trend_arrow': 'Trend',
+                        'immediate_manager': 'Manager',
+                        'Department': 'Department',
+                        'peer_group_type': 'Comparison Group'
+                    })
+                    target_cols = ['Email', 'RUI Score', 'License Risk', 'Last Active', 
+                                 'Peer Rank', 'Trend', 'Manager', 'Department', 'Comparison Group']
+                elif sheet_name == 'Manager Summary':
+                    # Manager Summary has its own columns already defined
+                    target_cols = df_local.columns.tolist()
                 else:
                     target_cols = cols
                 
@@ -700,6 +762,65 @@ class CopilotAnalyzer:
                     disclaimer_cell.fill = header_fill
                     disclaimer_cell.font = header_font
                     disclaimer_cell.alignment = Alignment(horizontal='center', vertical='center')
+                
+                # Add conditional formatting for RUI Analysis tab
+                if sheet_name == 'RUI Analysis' and 'RUI Score' in df_to_write.columns:
+                    # Color scale for RUI Score (red-yellow-green)
+                    rui_col_idx = df_to_write.columns.get_loc('RUI Score') + 1
+                    rui_col_letter = get_column_letter(rui_col_idx)
+                    rui_cell_range = f"{rui_col_letter}2:{rui_col_letter}{len(df_to_write)+1}"
+                    
+                    # Define colors
+                    red = 'FF0000'
+                    yellow = 'FFFF00'
+                    green = '00FF00'
+                    
+                    worksheet.conditional_formatting.add(
+                        rui_cell_range,
+                        ColorScaleRule(
+                            start_type='num', start_value=0, start_color=red,
+                            mid_type='num', mid_value=40, mid_color=yellow,
+                            end_type='num', end_value=100, end_color=green
+                        )
+                    )
+                    
+                    # Apply color to License Risk column based on text
+                    if 'License Risk' in df_to_write.columns:
+                        risk_col_idx = df_to_write.columns.get_loc('License Risk') + 1
+                        for row in range(2, len(df_to_write) + 2):
+                            cell = worksheet.cell(row=row, column=risk_col_idx)
+                            if 'High' in str(cell.value):
+                                cell.font = Font(color='FF0000', bold=True)
+                            elif 'Medium' in str(cell.value):
+                                cell.font = Font(color='FF8800', bold=True)
+                            elif 'Low' in str(cell.value):
+                                cell.font = Font(color='008800', bold=True)
+                
+                # Format Manager Summary tab
+                if sheet_name == 'Manager Summary':
+                    # Color scale for Avg RUI
+                    if 'Avg RUI' in df_to_write.columns:
+                        avg_rui_col_idx = df_to_write.columns.get_loc('Avg RUI') + 1
+                        avg_rui_col_letter = get_column_letter(avg_rui_col_idx)
+                        avg_rui_cell_range = f"{avg_rui_col_letter}2:{avg_rui_col_letter}{len(df_to_write)+1}"
+                        
+                        worksheet.conditional_formatting.add(
+                            avg_rui_cell_range,
+                            ColorScaleRule(
+                                start_type='num', start_value=0, start_color=red,
+                                mid_type='num', mid_value=40, mid_color=yellow,
+                                end_type='num', end_value=100, end_color=green
+                            )
+                        )
+                    
+                    # Highlight High Risk count
+                    if 'High Risk' in df_to_write.columns:
+                        high_risk_col_idx = df_to_write.columns.get_loc('High Risk') + 1
+                        for row in range(2, len(df_to_write) + 2):
+                            cell = worksheet.cell(row=row, column=high_risk_col_idx)
+                            if cell.value and int(cell.value) > 0:
+                                cell.font = Font(color='FF0000', bold=True)
+                
                 wrote_any = wrote_any or not df_to_write.empty
             self.update_status("5a2. Writing data sheets...")
             

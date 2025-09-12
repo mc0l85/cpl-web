@@ -13,7 +13,11 @@ A sleek, real-time web application for analyzing Microsoft Copilot usage reports
 *   **Real-Time Updates**: See the status of your analysis live, powered by WebSockets.
 *   **Dynamic Filtering**: Interactively filter user data by company, department, location, or manager.
 *   **Automated User Classification**: Users are automatically categorized into five groups: **Power User**, **Consistent User**, **Coaching Opportunity**, **New User**, and **License Recapture**.
-*   **Direct Downloads**: Download the comprehensive Excel report and interactive HTML leaderboard directly from your browser. The Excel report now includes a "Usage_Trend" sheet with a graph showing **Average Tools Used Over Time** for both global and filtered target groups.
+*   **NEW: Relative Use Index (RUI)**: Fair license usage assessment using manager-based peer comparisons. Users are scored 0-100 based on recency, frequency, breadth, and trend relative to their immediate team.
+*   **Direct Downloads**: Download the comprehensive Excel report and interactive HTML leaderboard directly from your browser. The Excel report now includes:
+    * **RUI Analysis** sheet with individual scores and license risk levels
+    * **Manager Summary** sheet showing team-level metrics
+    * **Usage_Trend** sheet with a graph showing **Average Tools Used Over Time**
 *   **User Deep Dive**: Search for a specific user to see detailed stats and a usage trend chart of their **average tools used**.
 
 ---
@@ -84,3 +88,42 @@ To run the tests, make sure your virtual environment is activated and then run t
 ```bash
 pytest
 ```
+
+---
+
+## 📊 Relative Use Index (RUI) System
+
+The RUI system provides a fairer approach to license management by comparing users to their immediate peers rather than using arbitrary thresholds.
+
+### How RUI Works
+
+Each user receives a score from 0-100 based on four components:
+
+1. **Recency (40%)**: How recently tools were used (30-day half-life decay)
+2. **Frequency (30%)**: How consistently tools are used across reporting periods  
+3. **Breadth (20%)**: Diversity of tool usage (average tools per report)
+4. **Trend (10%)**: Whether usage is growing, stable, or declining
+
+### Peer Group Formation
+
+Users are compared to others reporting to the same manager (minimum 5 users). If a manager has fewer than 5 direct reports, the system automatically walks up the management hierarchy until a sufficient peer group is found.
+
+### License Risk Categories
+
+- **Low Risk (RUI ≥ 40)**: License should be retained
+- **Medium Risk (RUI 20-39)**: User should be notified to increase usage
+- **High Risk (RUI < 20)**: License is a candidate for reclamation
+
+### Excel Report Tabs
+
+**RUI Analysis Tab**
+- Individual RUI scores and risk levels
+- Peer ranking (e.g., "3 of 8")
+- Manager and department information
+- Usage trend indicators
+
+**Manager Summary Tab**
+- Team-level aggregations
+- Average team RUI scores
+- Count of users in each risk category
+- Action items for managers
