@@ -599,42 +599,6 @@ class CopilotAnalyzer:
         self.update_status("Usage complexity trend calculated.")
         return trend_df
 
-    def style_excel_sheet_basic(self, worksheet, df):
-        """Apply basic styling without conditional formatting"""
-        from openpyxl.styles import PatternFill, Font, Alignment
-        from openpyxl.utils import get_column_letter
-        
-        # Style headers
-        header_fill = PatternFill(start_color="2d3748", end_color="2d3748", fill_type="solid")
-        header_font = Font(bold=True, color="FFFFFF")
-        for col_num, column_title in enumerate(df.columns, 1):
-            cell = worksheet.cell(row=1, column=col_num)
-            cell.fill, cell.font, cell.alignment = header_fill, header_font, Alignment(horizontal='center')
-        
-        # Apply row striping
-        if not df.empty:
-            stripe_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
-            for row_index in range(2, len(df) + 2):
-                if row_index % 2 == 1:
-                    for col_index in range(1, len(df.columns) + 1):
-                        worksheet.cell(row=row_index, column=col_index).fill = stripe_fill
-        
-        # Set column widths
-        for col_num, column_title in enumerate(df.columns, 1):
-            max_length = len(str(column_title))
-            if not df.empty:
-                for cell_value in df[column_title]:
-                    if len(str(cell_value)) > max_length: max_length = len(str(cell_value))
-            worksheet.column_dimensions[get_column_letter(col_num)].width = max_length + 2
-        
-        # Ensure all text is black (no red text or conditional formatting colors)
-        if not df.empty:
-            for row in range(2, len(df) + 2):
-                for col in range(1, len(df.columns) + 1):
-                    cell = worksheet.cell(row=row, column=col)
-                    # Force black text on all cells to override any conditional formatting
-                    cell.font = Font(color="000000")
-    
     def style_excel_sheet(self, worksheet, df):
         # Always format headers, even for empty sheets
         if len(df.columns) == 0: return
@@ -791,12 +755,7 @@ class CopilotAnalyzer:
                 
                 df_to_write = df_local[target_cols] if not df_local.empty else pd.DataFrame(columns=target_cols)
                 df_to_write.to_excel(writer, sheet_name=sheet_name, index=False, float_format="%.2f")
-                # Skip conditional formatting for Leaderboard to avoid green highlights and red text
-                if sheet_name != 'Leaderboard':
-                    self.style_excel_sheet(writer.sheets[sheet_name], df_to_write)
-                else:
-                    # Apply only basic styling for Leaderboard (headers and striping)
-                    self.style_excel_sheet_basic(writer.sheets[sheet_name], df_to_write)
+                self.style_excel_sheet(writer.sheets[sheet_name], df_to_write)
 
                 # Add disclaimer to Leaderboard
                 if sheet_name == 'Leaderboard':
