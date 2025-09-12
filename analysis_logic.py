@@ -712,7 +712,25 @@ class CopilotAnalyzer:
                 rui_df['Last Active'] = pd.to_datetime(rui_df['Overall Recency']).apply(
                     lambda x: f"{(self.reference_date - x).days} days ago" if pd.notna(x) else "Never"
                 )
-                sheets['RUI Analysis'] = rui_df.sort_values('rui_score', ascending=True)
+                
+                # Create a sort key for License Risk to ensure proper grouping order
+                risk_order = {
+                    'High - Reclaim': 0,
+                    'Medium - Review': 1,
+                    'Low - Retain': 2,
+                    'Low - New User (Grace Period)': 3
+                }
+                
+                # Add sort key column (will not be included in output)
+                rui_df['risk_sort_key'] = rui_df['license_risk'].map(
+                    lambda x: next((v for k, v in risk_order.items() if k in str(x)), 99)
+                )
+                
+                # Sort by License Risk (High → Medium → Low), then by RUI score within each group
+                sheets['RUI Analysis'] = rui_df.sort_values(
+                    ['risk_sort_key', 'rui_score'], 
+                    ascending=[True, True]
+                ).drop('risk_sort_key', axis=1)
                 
                 # Manager Summary tab if available
                 if manager_summary_df is not None and not manager_summary_df.empty:
@@ -729,8 +747,8 @@ class CopilotAnalyzer:
             # Define columns for No Use tabs (subset of main columns)
             no_use_cols = ['Global Rank', 'Email', 'Overall Recency', 'Avg Tools / Report', 'Days Since License', 'Usage Trend']
             
-            # Define columns for RUI Analysis tab
-            rui_cols = ['Email', 'rui_score', 'license_risk', 'Last Active', 'peer_rank_display', 
+            # Define columns for RUI Analysis tab (License Risk near front for visibility)
+            rui_cols = ['Email', 'license_risk', 'rui_score', 'peer_rank_display', 'Last Active', 
                        'trend_arrow', 'immediate_manager', 'Department', 'peer_group_type']
             
             # Manager Summary tab uses its own columns
@@ -758,8 +776,8 @@ class CopilotAnalyzer:
                         'Department': 'Department',
                         'peer_group_type': 'Comparison Group'
                     })
-                    target_cols = ['Email', 'RUI Score', 'License Risk', 'Last Active', 
-                                 'Peer Rank', 'Trend', 'Manager', 'Department', 'Comparison Group']
+                    target_cols = ['Email', 'License Risk', 'RUI Score', 'Peer Rank', 'Last Active', 
+                                 'Trend', 'Manager', 'Department', 'Comparison Group']
                 elif sheet_name == 'Manager Summary':
                     # Manager Summary has its own columns already defined
                     target_cols = df_local.columns.tolist()
@@ -829,14 +847,36 @@ class CopilotAnalyzer:
                     # Apply color to License Risk column based on text
                     if 'License Risk' in df_to_write.columns:
                         risk_col_idx = df_to_write.columns.get_loc('License Risk') + 1
+                        
+                        # Track risk groups for visual separation
+                        last_risk = None
+                        rows_inserted = 0
+                        
                         for row in range(2, len(df_to_write) + 2):
-                            cell = worksheet.cell(row=row, column=risk_col_idx)
-                            if 'High' in str(cell.value):
+                            actual_row = row + rows_inserted
+                            cell = worksheet.cell(row=actual_row, column=risk_col_idx)
+                            current_risk = str(cell.value)
+                            
+                            # Add separator row between risk groups
+                            if last_risk and last_risk != current_risk and row > 2:
+                                # Insert a row with a light gray background as separator
+                                worksheet.insert_rows(actual_row)
+                                separator_fill = PatternFill(start_color="E0E0E0", end_color="E0E0E0", fill_type="solid")
+                                for col in range(1, len(df_to_write.columns) + 1):
+                                    worksheet.cell(row=actual_row, column=col).fill = separator_fill
+                                rows_inserted += 1
+                                actual_row += 1
+                                cell = worksheet.cell(row=actual_row, column=risk_col_idx)
+                            
+                            # Apply color formatting to risk text
+                            if 'High' in current_risk:
                                 cell.font = Font(color='FF0000', bold=True)
-                            elif 'Medium' in str(cell.value):
+                            elif 'Medium' in current_risk:
                                 cell.font = Font(color='FF8800', bold=True)
-                            elif 'Low' in str(cell.value):
+                            elif 'Low' in current_risk:
                                 cell.font = Font(color='008800', bold=True)
+                            
+                            last_risk = current_risk
                 
                 # Format Manager Summary tab
                 if sheet_name == 'Manager Summary':
