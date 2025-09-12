@@ -70,6 +70,7 @@ After reviewing your current implementation and the proposed Relative Use Index 
    - Only use global comparison for C-suite edge cases
 
 2. **RUI Thresholds**:
+   - New Users (< 90 days): Automatic grace period, protected from reclamation
    - RUI ≥ 40: License retained
    - RUI 20-39: Warning status
    - RUI < 20: Reclamation candidate
@@ -94,13 +95,14 @@ The manager-based peer group approach ensures fair comparisons between users wit
 
 **Manager Summary View:**
 
-| Manager Name | Team Size | Avg RUI | High Risk | Medium Risk | Low Risk | Action Required |
-|--------------|-----------|---------|-----------|-------------|----------|-----------------|
-| Jane Smith | 8 | 52 | 1 | 2 | 5 | 1 |
-| John Doe | 6 | 38 | 2 | 3 | 1 | 2 |
+| Manager Name | Team Size | Avg RUI | High Risk | Medium Risk | Low Risk | New Users | Action Required |
+|--------------|-----------|---------|-----------|-------------|----------|-----------|-----------------|
+| Jane Smith | 8 | 52 | 1 | 2 | 3 | 2 | 1 |
+| John Doe | 6 | 38 | 2 | 2 | 1 | 1 | 2 |
 
 **License Risk Categories:**
-- **High Risk (RUI < 20)**: Recommend immediate license reclamation
+- **New User (< 90 days)**: Protected grace period for onboarding
+- **High Risk (RUI < 20)**: Recommend immediate license reclamation (except new users)
 - **Medium Risk (RUI 20-39)**: Review usage and notify user
 - **Low Risk (RUI ≥ 40)**: Retain license
 
@@ -134,9 +136,12 @@ RUI combines four factors to create a single score:
 
 | Your RUI | License Risk | What Happens |
 |----------|--------------|--------------|
+| Any score | **New User** 🆕 | 90-day grace period (protected) |
 | 40-100 | **Low Risk** ✅ | Keep your license |
 | 20-39 | **Medium Risk** ⚠️ | You'll receive a usage reminder |
 | 0-19 | **High Risk** ❌ | License may be reclaimed |
+
+**Important**: New users (less than 90 days since first appearance) are automatically protected during their learning period, regardless of RUI score.
 
 ### Why Peer Comparison?
 You're compared to others who report to the same manager because:

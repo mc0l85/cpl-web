@@ -110,9 +110,10 @@ Users are compared to others reporting to the same manager (minimum 5 users). If
 
 ### License Risk Categories
 
+- **New User (< 90 days)**: Protected during 90-day grace period for onboarding
 - **Low Risk (RUI ≥ 40)**: License should be retained
 - **Medium Risk (RUI 20-39)**: User should be notified to increase usage
-- **High Risk (RUI < 20)**: License is a candidate for reclamation
+- **High Risk (RUI < 20)**: License is a candidate for reclamation (except new users)
 
 ### Excel Report Tabs
 

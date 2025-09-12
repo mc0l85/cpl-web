@@ -275,6 +275,12 @@ class RUICalculator:
         
         df['license_risk'] = df['rui_score'].apply(get_risk_level)
         
+        # Override risk classification for new users (90-day grace period)
+        # New users should not be at risk during their onboarding period
+        if 'Classification' in df.columns:
+            new_user_mask = df['Classification'] == 'New User'
+            df.loc[new_user_mask, 'license_risk'] = 'Low - New User (Grace Period)'
+        
         # Create peer rank string (e.g., "3 of 8")
         df['peer_rank_display'] = df.apply(
             lambda x: f"{int(x['peer_rank'])} of {int(x['peer_group_size'])}" 
@@ -324,13 +330,17 @@ class RUICalculator:
             summary.loc[manager, 'low_risk_count'] = (
                 manager_df['license_risk'].str.startswith('Low')
             ).sum()
+            # New users are counted separately
+            summary.loc[manager, 'new_user_count'] = (
+                manager_df['license_risk'].str.contains('New User')
+            ).sum()
             summary.loc[manager, 'action_required'] = (
                 summary.loc[manager, 'high_risk_count']
             )
         
         summary = summary.reset_index()
         summary.columns = ['Manager Name', 'Team Size', 'Avg RUI', 
-                          'High Risk', 'Medium Risk', 'Low Risk', 'Action Required']
+                          'High Risk', 'Medium Risk', 'Low Risk', 'New Users', 'Action Required']
         
         # Sort by action required, then avg RUI
         summary = summary.sort_values(['Action Required', 'Avg RUI'], 
