@@ -630,17 +630,23 @@ class CopilotAnalyzer:
         # Only apply conditional formatting if there's data
         if not df.empty:
             red, yellow, green = "F8696B", "FFEB84", "63BE7B"
+            max_row = len(df) + 1  # Calculate max row once for consistency
+            print(f"Applying conditional formatting to sheet with {len(df)} data rows (max_row: {max_row})")
+            
             if 'Engagement Score' in df.columns:
                 col_letter = get_column_letter(df.columns.get_loc('Engagement Score') + 1)
-                cell_range = f"{col_letter}2:{col_letter}{len(df)+1}"
+                cell_range = f"{col_letter}2:{col_letter}{max_row}"
+                print(f"  Engagement Score range: {cell_range}")
                 worksheet.conditional_formatting.add(cell_range, ColorScaleRule(start_type='min', start_color=red, mid_type='percentile', mid_value=50, mid_color=yellow, end_type='max', end_color=green))
             if 'Adjusted Consistency (%)' in df.columns:
                 col_letter = get_column_letter(df.columns.get_loc('Adjusted Consistency (%)') + 1)
-                cell_range = f"{col_letter}2:{col_letter}{len(df)+1}"
+                cell_range = f"{col_letter}2:{col_letter}{max_row}"
+                print(f"  Adjusted Consistency range: {cell_range}")
                 worksheet.conditional_formatting.add(cell_range, DataBarRule(start_type='min', end_type='max', color=green))
             if 'Adoption Velocity' in df.columns:
                 col_letter = get_column_letter(df.columns.get_loc('Adoption Velocity') + 1)
-                cell_range = f"{col_letter}2:{col_letter}{len(df)+1}"
+                cell_range = f"{col_letter}2:{col_letter}{max_row}"
+                print(f"  Adoption Velocity range: {cell_range}")
                 worksheet.conditional_formatting.add(cell_range, ColorScaleRule(start_type='min', start_color=yellow, mid_type='percentile', mid_value=50, mid_color=yellow, end_type='max', end_color=green))
 
     def create_excel_report(self, top_df, under_df, realloc_df, all_df=None, usage_complexity_trend_df=None, manager_summary_df=None):
@@ -720,37 +726,15 @@ class CopilotAnalyzer:
             # Manager Summary tab uses its own columns
             
             for sheet_name, df in sheets.items():
+                print(f"DEBUG: Processing sheet '{sheet_name}' with {len(df)} rows")
                 df_local = df.copy()
                 
-                # Fix for alternating empty rows issue
-                # Check if the dataframe has alternating empty rows and remove them
+                # Remove any truly empty rows (all columns are NaN)
                 if not df_local.empty:
                     empty_mask = df_local.isna().all(axis=1)
                     if empty_mask.sum() > 0:
-                        # Check for alternating pattern (every odd row is empty)
-                        has_alternating = True
-                        total_rows = len(df_local)
-                        # Quick check: if about half the rows are empty, might be alternating
-                        if empty_mask.sum() > total_rows * 0.4 and empty_mask.sum() < total_rows * 0.6:
-                            # Verify alternating pattern
-                            for i in range(0, min(10, total_rows), 2):
-                                if empty_mask.iloc[i]:  # Even index should have data
-                                    has_alternating = False
-                                    break
-                            if has_alternating:
-                                for i in range(1, min(10, total_rows), 2):
-                                    if not empty_mask.iloc[i]:  # Odd index should be empty
-                                        has_alternating = False
-                                        break
-                        else:
-                            has_alternating = False
-                        
-                        if has_alternating:
-                            print(f"WARNING: Sheet '{sheet_name}' has alternating empty rows. Removing {empty_mask.sum()} empty rows...")
-                            df_local = df_local[~empty_mask].reset_index(drop=True)
-                        elif empty_mask.sum() > 0:
-                            print(f"INFO: Sheet '{sheet_name}' has {empty_mask.sum()} empty rows. Removing them...")
-                            df_local = df_local[~empty_mask].reset_index(drop=True)
+                        print(f"INFO: Sheet '{sheet_name}' has {empty_mask.sum()} completely empty rows. Removing them...")
+                        df_local = df_local[~empty_mask].reset_index(drop=True)
                 
                 # Rename columns for display
                 for old_name, new_name in col_display_map.items():
@@ -785,45 +769,41 @@ class CopilotAnalyzer:
                                  'Total Tools Used', 'Avg Tools / Report', 'Adoption Velocity', 
                                  'Tool Expansion Rate', 'Days Since License', 'Usage Trend', 'Engagement Score']
                 
-                # Ensure all target columns exist
+                # Ensure all target columns exist - but only add missing columns if absolutely necessary
+                # First check if we have the renamed columns we need
+                if 'Total Tools Used' in target_cols and 'Total Tools Used' not in df_local.columns:
+                    if 'Usage Complexity' in df_local.columns:
+                        df_local = df_local.rename(columns={'Usage Complexity': 'Total Tools Used'})
+                    else:
+                        print(f"ERROR: Neither 'Total Tools Used' nor 'Usage Complexity' found in sheet '{sheet_name}'")
+                
+                # Only add columns that are truly missing and essential
                 for c in target_cols:
                     if c not in df_local.columns:
-                        # Special handling for 'Total Tools Used' which might still be 'Usage Complexity'
-                        if c == 'Total Tools Used':
-                            # Check if we have the original column that should have been renamed
-                            if 'Usage Complexity' in df.columns and 'Usage Complexity' not in df_local.columns:
-                                # The rename didn't happen, do it now
-                                df_local['Total Tools Used'] = df['Usage Complexity']
-                                print(f"INFO: Recovered 'Total Tools Used' from original 'Usage Complexity' column")
-                            elif 'Usage Complexity' in df_local.columns:
-                                # The column exists but wasn't renamed, rename it now
-                                df_local = df_local.rename(columns={'Usage Complexity': 'Total Tools Used'})
-                                print(f"INFO: Renamed 'Usage Complexity' to 'Total Tools Used'")
-                            else:
-                                # Column is genuinely missing
-                                print(f"ERROR: Column 'Total Tools Used' (or 'Usage Complexity') is missing from the data")
-                                df_local[c] = pd.Series([np.nan]*len(df_local))
-                        elif c == 'Overall Recency':
-                            # Overall Recency is critical and should always exist
-                            print(f"ERROR: Critical column 'Overall Recency' is missing from the data")
-                            # Try to recover from the original dataframe if possible
-                            if 'Overall Recency' in df.columns:
-                                df_local['Overall Recency'] = df['Overall Recency']
-                                print(f"INFO: Recovered 'Overall Recency' from original dataframe")
-                            else:
-                                df_local[c] = pd.Series([pd.NaT]*len(df_local))
-                        else:
-                            # For other missing columns, fill with NaN
-                            df_local[c] = pd.Series([np.nan]*len(df_local))
+                        print(f"WARNING: Column '{c}' missing from sheet '{sheet_name}' - this may cause formatting issues")
+                        # Don't add missing columns - let pandas handle it in column selection
                 
-                # Create a proper copy to avoid SettingWithCopyWarning and data corruption
-                df_to_write = df_local[target_cols].copy() if not df_local.empty else pd.DataFrame(columns=target_cols)
+                # Select only the columns that exist in the dataframe
+                available_cols = [c for c in target_cols if c in df_local.columns]
+                if len(available_cols) != len(target_cols):
+                    missing_cols = [c for c in target_cols if c not in df_local.columns]
+                    print(f"INFO: Sheet '{sheet_name}' missing columns: {missing_cols}")
                 
-                # Ensure proper data types for critical columns
-                if 'Overall Recency' in df_to_write.columns:
-                    df_to_write['Overall Recency'] = pd.to_datetime(df_to_write['Overall Recency'], errors='coerce')
-                if 'Total Tools Used' in df_to_write.columns:
-                    df_to_write['Total Tools Used'] = pd.to_numeric(df_to_write['Total Tools Used'], errors='coerce')
+                # Create the final dataframe with available columns only
+                if not df_local.empty and available_cols:
+                    df_to_write = df_local[available_cols].copy()
+                    
+                    # Ensure proper data types only for columns that exist and have valid data
+                    if 'Overall Recency' in df_to_write.columns:
+                        # Only convert if not already datetime and has valid data
+                        if not pd.api.types.is_datetime64_any_dtype(df_to_write['Overall Recency']):
+                            df_to_write['Overall Recency'] = pd.to_datetime(df_to_write['Overall Recency'], errors='coerce')
+                    if 'Total Tools Used' in df_to_write.columns:
+                        # Only convert if not already numeric and has valid data
+                        if not pd.api.types.is_numeric_dtype(df_to_write['Total Tools Used']):
+                            df_to_write['Total Tools Used'] = pd.to_numeric(df_to_write['Total Tools Used'], errors='coerce')
+                else:
+                    df_to_write = pd.DataFrame(columns=available_cols)
                 
                 # Debug logging for Leaderboard sheet
                 if sheet_name == 'Leaderboard':
@@ -842,6 +822,12 @@ class CopilotAnalyzer:
                             print(f"    First 15 values: {df_to_write['Total Tools Used'].head(15).tolist()}")
                 
                 df_to_write.to_excel(writer, sheet_name=sheet_name, index=False, float_format="%.2f")
+                
+                # SAFETY CHECK: Log what's in column 5 for each sheet
+                worksheet = writer.sheets[sheet_name]
+                if len(df_to_write.columns) >= 5:
+                    col_5_header = worksheet.cell(row=1, column=5).value
+                    print(f"DEBUG: Sheet '{sheet_name}' column 5 header: '{col_5_header}'")
                 
                 # For Leaderboard, apply styling AFTER adding disclaimer to get row positions right
                 if sheet_name != 'Leaderboard':
@@ -863,6 +849,7 @@ class CopilotAnalyzer:
                 
                 # Add conditional formatting for RUI Analysis tab
                 if sheet_name == 'RUI Analysis' and 'RUI Score' in df_to_write.columns:
+                    print(f"DEBUG: Formatting RUI Analysis tab with {len(df_to_write)} rows")
                     # Color scale for RUI Score (red-yellow-green)
                     rui_col_idx = df_to_write.columns.get_loc('RUI Score') + 1
                     rui_col_letter = get_column_letter(rui_col_idx)
@@ -882,42 +869,38 @@ class CopilotAnalyzer:
                         )
                     )
                     
-                    # Apply color to License Risk column based on text
+                    # Apply color to License Risk column based on text - ONLY for RUI Analysis
                     if 'License Risk' in df_to_write.columns:
                         risk_col_idx = df_to_write.columns.get_loc('License Risk') + 1
+                        print(f"DEBUG: Applying License Risk formatting to RUI Analysis sheet '{worksheet.title}', column {risk_col_idx}")
                         
-                        # Track risk groups for visual separation
-                        last_risk = None
-                        rows_inserted = 0
-                        
-                        for row in range(2, len(df_to_write) + 2):
-                            actual_row = row + rows_inserted
-                            cell = worksheet.cell(row=actual_row, column=risk_col_idx)
-                            current_risk = str(cell.value)
-                            
-                            # Add separator row between risk groups
-                            if last_risk and last_risk != current_risk and row > 2:
-                                # Insert a row with a light gray background as separator
-                                worksheet.insert_rows(actual_row)
-                                separator_fill = PatternFill(start_color="E0E0E0", end_color="E0E0E0", fill_type="solid")
-                                for col in range(1, len(df_to_write.columns) + 1):
-                                    worksheet.cell(row=actual_row, column=col).fill = separator_fill
-                                rows_inserted += 1
-                                actual_row += 1
-                                cell = worksheet.cell(row=actual_row, column=risk_col_idx)
-                            
-                            # Apply color formatting to risk text
-                            if 'High' in current_risk:
-                                cell.font = Font(color='FF0000', bold=True)
-                            elif 'Medium' in current_risk:
-                                cell.font = Font(color='FF8800', bold=True)
-                            elif 'Low' in current_risk:
-                                cell.font = Font(color='008800', bold=True)
-                            
-                            last_risk = current_risk
+                        # SAFETY CHECK: Ensure we're on the right worksheet
+                        if worksheet.title != 'RUI Analysis':
+                            print(f"ERROR: Attempting to apply RUI formatting to wrong sheet '{worksheet.title}' - SKIPPING")
+                        else:
+                            # Apply color formatting to License Risk column without inserting separator rows
+                            for row in range(2, len(df_to_write) + 2):
+                                cell = worksheet.cell(row=row, column=risk_col_idx)
+                                current_risk = str(cell.value)
+                                
+                                # CRITICAL SAFETY CHECK: Never apply Font formatting to column 5 (Total Tools Used)
+                                if risk_col_idx == 5:
+                                    print(f"  CRITICAL ERROR: Attempting to apply Font formatting to column 5 (Total Tools Used) - SKIPPING ROW {row}")
+                                else:
+                                    # Apply color formatting to risk text
+                                    if 'High' in current_risk:
+                                        cell.font = Font(color='FF0000', bold=True)
+                                        print(f"  DEBUG: Applied RED BOLD to RUI Analysis row {row}, col {risk_col_idx}: '{current_risk}'")
+                                    elif 'Medium' in current_risk:
+                                        cell.font = Font(color='FF8800', bold=True)
+                                    elif 'Low' in current_risk:
+                                        cell.font = Font(color='008800', bold=True)
+                elif sheet_name == 'Leaderboard':
+                    print(f"DEBUG: Processing Leaderboard - NOT applying any Font colors/bold formatting")
                 
                 # Format Manager Summary tab
                 if sheet_name == 'Manager Summary':
+                    print(f"DEBUG: Formatting Manager Summary tab with {len(df_to_write)} rows")
                     # Color scale for Avg RUI
                     if 'Avg RUI' in df_to_write.columns:
                         try:
@@ -937,20 +920,40 @@ class CopilotAnalyzer:
                             # Skip formatting if there's an issue
                             pass
                     
-                    # Highlight High Risk count
-                    if 'High Risk' in df_to_write.columns:
-                        high_risk_col_idx = df_to_write.columns.get_loc('High Risk') + 1
-                        for row in range(2, len(df_to_write) + 2):
-                            cell = worksheet.cell(row=row, column=high_risk_col_idx)
+                    # Highlight High Risk count - STRICTLY ONLY apply to Manager Summary sheet
+                    if sheet_name == 'Manager Summary' and 'High Risk' in df_to_write.columns:
+                        print(f"DEBUG: About to apply High Risk formatting - sheet_name='{sheet_name}', worksheet.title='{worksheet.title}', has High Risk column: {'High Risk' in df_to_write.columns}")
+                        
+                        # SAFETY CHECK: Ensure we're on the right worksheet
+                        if worksheet.title != 'Manager Summary':
+                            print(f"ERROR: Attempting to apply Manager Summary formatting to wrong sheet '{worksheet.title}' - SKIPPING")
+                        else:
                             try:
-                                # Try to convert to int, skip if not possible
-                                if cell.value is not None and pd.notna(cell.value):
-                                    value = int(float(str(cell.value)))
-                                    if value > 0:
-                                        cell.font = Font(color='FF0000', bold=True)
-                            except (ValueError, TypeError):
-                                # Skip non-numeric values
+                                high_risk_col_idx = df_to_write.columns.get_loc('High Risk') + 1
+                                print(f"DEBUG: Applying High Risk formatting to Manager Summary sheet '{worksheet.title}', column {high_risk_col_idx}")
+                                for row in range(2, len(df_to_write) + 2):
+                                    cell = worksheet.cell(row=row, column=high_risk_col_idx)
+                                    try:
+                                        # CRITICAL SAFETY CHECK: Never apply Font formatting to column 5 (Total Tools Used)
+                                        if high_risk_col_idx == 5:
+                                            print(f"  CRITICAL ERROR: Manager Summary attempting to apply Font formatting to column 5 (Total Tools Used) - SKIPPING ROW {row}")
+                                        else:
+                                            # Try to convert to int, skip if not possible
+                                            if cell.value is not None and pd.notna(cell.value):
+                                                value = int(float(str(cell.value)))
+                                                if value > 0:
+                                                    cell.font = Font(color='FF0000', bold=True)
+                                                    print(f"  DEBUG: Applied RED BOLD to Manager Summary row {row}, col {high_risk_col_idx}: value {value}")
+                                    except (ValueError, TypeError):
+                                        # Skip non-numeric values
+                                        pass
+                            except Exception as e:
+                                print(f"DEBUG: Error applying High Risk formatting to Manager Summary: {e}")
                                 pass
+                    elif sheet_name == 'Leaderboard':
+                        print(f"DEBUG: Skipping High Risk formatting for Leaderboard sheet - this should NOT apply red/bold to Column E")
+                    elif 'High Risk' in df_to_write.columns:
+                        print(f"DEBUG: Sheet '{sheet_name}' has 'High Risk' column but is not Manager Summary - not applying formatting")
                 
                 wrote_any = wrote_any or not df_to_write.empty
             self.update_status("5a2. Writing data sheets...")
