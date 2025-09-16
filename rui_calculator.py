@@ -325,6 +325,20 @@ class RUICalculator:
                     df.at[idx, 'peer_group'] = f"org_{manager}"
                     df.at[idx, 'peer_group_size'] = len(peers)
                     df.at[idx, 'peer_group_type'] = f'Organization - {manager}'
+                    
+                    # Log details for Peter Obasa's organizational groups
+                    if 'peter' in manager.lower() and 'obasa' in manager.lower():
+                        current_user_email = df.at[idx, 'Email']
+                        print(f"\n>>> ASSIGNING TO ORG_PETER OBASA: {current_user_email}")
+                        print(f"    Manager: {manager}")
+                        print(f"    Found {len(peers)} total users under {manager}")
+                        print(f"    User's manager chain: {user.get('ManagerLine', 'N/A')}")
+                        print(f"    All users found under {manager}:")
+                        for peer_email in peers['Email'].values[:20]:  # Limit to first 20
+                            print(f"      - {peer_email}")
+                        if len(peers) > 20:
+                            print(f"      ... and {len(peers) - 20} more")
+                    
                     break
             
             # If no suitable manager group found, use department or global
@@ -343,6 +357,27 @@ class RUICalculator:
                     df.at[idx, 'peer_group'] = 'global'
                     df.at[idx, 'peer_group_size'] = len(df)
                     df.at[idx, 'peer_group_type'] = 'Global'
+        
+        # Recalculate peer_group_size to match actual group membership
+        print("\n" + "="*70)
+        print("RECALCULATING PEER GROUP SIZES")
+        print("="*70)
+        
+        for group_name in df['peer_group'].unique():
+            if group_name:
+                group_members = df[df['peer_group'] == group_name]
+                actual_size = len(group_members)
+                
+                # Update all members of this group with the correct size
+                for idx in group_members.index:
+                    if df.at[idx, 'peer_group_size'] != actual_size:
+                        old_size = df.at[idx, 'peer_group_size']
+                        df.at[idx, 'peer_group_size'] = actual_size
+                        
+                        # Log significant corrections
+                        if 'peter' in group_name.lower() or 'obasa' in group_name.lower():
+                            print(f"  Corrected {group_name}: {old_size} -> {actual_size}")
+                            break  # Only print once per group
         
         # Final summary logging
         print("\n" + "="*70)
