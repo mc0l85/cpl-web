@@ -147,11 +147,6 @@ class RUICalculator:
         df['peer_group_size'] = 0
         df['peer_group_type'] = None
         
-        # Add logging for debugging peer group sizes
-        print("\n" + "="*70)
-        print("PEER GROUP ASSIGNMENT - DETAILED LOGGING")
-        print("="*70)
-        
         if 'ManagerLine' not in df.columns:
             # No manager data - use global comparison
             df['peer_group'] = 'global'
@@ -263,17 +258,6 @@ class RUICalculator:
                     df.at[idx, 'peer_group'] = f"direct_{immediate_manager}"
                     df.at[idx, 'peer_group_size'] = len(peers)
                     df.at[idx, 'peer_group_type'] = 'Direct Manager Team'
-                    
-                    # Log details for Peter Obassa's team
-                    if 'peter' in immediate_manager.lower() and 'obasa' in immediate_manager.lower():
-                        current_user_email = df.at[idx, 'Email']
-                        print(f"\n>>> FOUND PETER OBASSA'S DIRECT REPORT: {current_user_email}")
-                        print(f"    Manager: {immediate_manager}")
-                        print(f"    Peer group size: {len(peers)}")
-                        print(f"    Peer group members:")
-                        for peer_email in peers['Email'].values:
-                            print(f"      - {peer_email}")
-                    
                     continue
             
             # Strategy 3: Peers at same level (cousins - same skip-level manager)
@@ -325,20 +309,6 @@ class RUICalculator:
                     df.at[idx, 'peer_group'] = f"org_{manager}"
                     df.at[idx, 'peer_group_size'] = len(peers)
                     df.at[idx, 'peer_group_type'] = f'Organization - {manager}'
-                    
-                    # Log details for Peter Obasa's organizational groups
-                    if 'peter' in manager.lower() and 'obasa' in manager.lower():
-                        current_user_email = df.at[idx, 'Email']
-                        print(f"\n>>> ASSIGNING TO ORG_PETER OBASA: {current_user_email}")
-                        print(f"    Manager: {manager}")
-                        print(f"    Found {len(peers)} total users under {manager}")
-                        print(f"    User's manager chain: {user.get('ManagerLine', 'N/A')}")
-                        print(f"    All users found under {manager}:")
-                        for peer_email in peers['Email'].values[:20]:  # Limit to first 20
-                            print(f"      - {peer_email}")
-                        if len(peers) > 20:
-                            print(f"      ... and {len(peers) - 20} more")
-                    
                     break
             
             # If no suitable manager group found, use department or global
@@ -359,50 +329,17 @@ class RUICalculator:
                     df.at[idx, 'peer_group_type'] = 'Global'
         
         # Recalculate peer_group_size to match actual group membership
-        print("\n" + "="*70)
-        print("RECALCULATING PEER GROUP SIZES")
-        print("="*70)
-        
+        # This fixes cases where initial assignment counted potential peers
+        # but actual group membership is different
         for group_name in df['peer_group'].unique():
             if group_name:
                 group_members = df[df['peer_group'] == group_name]
                 actual_size = len(group_members)
                 
-                # Log all groups being processed
-                if 'peter' in group_name.lower() or 'obasa' in group_name.lower():
-                    print(f"\nProcessing group: {group_name}")
-                    print(f"  Members found: {len(group_members)}")
-                    print(f"  Member emails: {list(group_members['Email'].values)[:10]}")  # Show first 10
-                
                 # Update all members of this group with the correct size
-                corrections_made = 0
                 for idx in group_members.index:
                     if df.at[idx, 'peer_group_size'] != actual_size:
-                        old_size = df.at[idx, 'peer_group_size']
                         df.at[idx, 'peer_group_size'] = actual_size
-                        corrections_made += 1
-                        
-                        # Log each correction for Peter Obasa groups
-                        if 'peter' in group_name.lower() or 'obasa' in group_name.lower():
-                            print(f"    Correcting {df.at[idx, 'Email']}: {old_size} -> {actual_size}")
-                
-                if corrections_made > 0 and ('peter' in group_name.lower() or 'obasa' in group_name.lower()):
-                    print(f"  Total corrections made: {corrections_made}")
-        
-        # Final summary logging
-        print("\n" + "="*70)
-        print("PEER GROUP SUMMARY")
-        print("="*70)
-        
-        # Check for any Peter Obassa related groups
-        for group_name in df['peer_group'].unique():
-            if group_name and ('peter' in group_name.lower() or 'obasa' in group_name.lower()):
-                group_members = df[df['peer_group'] == group_name]
-                print(f"\nGroup: {group_name}")
-                print(f"  Size recorded: {group_members.iloc[0]['peer_group_size'] if len(group_members) > 0 else 'N/A'}")
-                print(f"  Actual members: {len(group_members)}")
-                if len(group_members) > 0 and group_members.iloc[0]['peer_group_size'] != len(group_members):
-                    print(f"  ⚠️  MISMATCH DETECTED!")
         
         return df
     
@@ -480,30 +417,11 @@ class RUICalculator:
             df.loc[new_user_mask, 'license_risk'] = 'Low - New User (Grace Period)'
         
         # Create peer rank string (e.g., "3 of 8")
-        print("\n" + "="*70)
-        print("CREATING PEER RANK DISPLAY VALUES")
-        print("="*70)
-        
-        # Log Peter Obasa related peer rank displays
-        for idx, row in df.iterrows():
-            if row.get('peer_group') and ('peter' in str(row.get('peer_group')).lower() or 'obasa' in str(row.get('peer_group')).lower()):
-                email = row['Email']
-                peer_group = row['peer_group']
-                peer_group_size = row['peer_group_size']
-                peer_rank = row['peer_rank']
-                print(f"  {email}: rank={peer_rank}, size={peer_group_size}, group={peer_group}")
-        
         df['peer_rank_display'] = df.apply(
             lambda x: f"{int(x['peer_rank'])} of {int(x['peer_group_size'])}" 
             if x['peer_group_size'] > 0 else "N/A",
             axis=1
         )
-        
-        # Log the final peer_rank_display values for Peter Obasa's groups
-        print("\nFinal peer_rank_display values for Peter Obasa groups:")
-        for idx, row in df.iterrows():
-            if row.get('peer_group') and ('peter' in str(row.get('peer_group')).lower() or 'obasa' in str(row.get('peer_group')).lower()):
-                print(f"  {row['Email']}: '{row['peer_rank_display']}'  (group: {row['peer_group']})")
         
         # Create trend arrow
         trend_arrows = {
