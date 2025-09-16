@@ -147,6 +147,11 @@ class RUICalculator:
         df['peer_group_size'] = 0
         df['peer_group_type'] = None
         
+        # Add logging for debugging peer group sizes
+        print("\n" + "="*70)
+        print("PEER GROUP ASSIGNMENT - DETAILED LOGGING")
+        print("="*70)
+        
         if 'ManagerLine' not in df.columns:
             # No manager data - use global comparison
             df['peer_group'] = 'global'
@@ -258,6 +263,16 @@ class RUICalculator:
                     df.at[idx, 'peer_group'] = f"direct_{immediate_manager}"
                     df.at[idx, 'peer_group_size'] = len(peers)
                     df.at[idx, 'peer_group_type'] = 'Direct Manager Team'
+                    
+                    # Log details for Peter Obassa's team
+                    if 'peter' in immediate_manager.lower() and 'obasa' in immediate_manager.lower():
+                        print(f"\n>>> FOUND PETER OBASSA'S DIRECT REPORT: {user_email}")
+                        print(f"    Manager: {immediate_manager}")
+                        print(f"    Peer group size: {len(peers)}")
+                        print(f"    Peer group members:")
+                        for peer_email in peers['Email'].values:
+                            print(f"      - {peer_email}")
+                    
                     continue
             
             # Strategy 3: Peers at same level (cousins - same skip-level manager)
@@ -327,6 +342,21 @@ class RUICalculator:
                     df.at[idx, 'peer_group'] = 'global'
                     df.at[idx, 'peer_group_size'] = len(df)
                     df.at[idx, 'peer_group_type'] = 'Global'
+        
+        # Final summary logging
+        print("\n" + "="*70)
+        print("PEER GROUP SUMMARY")
+        print("="*70)
+        
+        # Check for any Peter Obassa related groups
+        for group_name in df['peer_group'].unique():
+            if group_name and ('peter' in group_name.lower() or 'obasa' in group_name.lower()):
+                group_members = df[df['peer_group'] == group_name]
+                print(f"\nGroup: {group_name}")
+                print(f"  Size recorded: {group_members.iloc[0]['peer_group_size'] if len(group_members) > 0 else 'N/A'}")
+                print(f"  Actual members: {len(group_members)}")
+                if len(group_members) > 0 and group_members.iloc[0]['peer_group_size'] != len(group_members):
+                    print(f"  ⚠️  MISMATCH DETECTED!")
         
         return df
     
