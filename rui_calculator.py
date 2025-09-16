@@ -266,7 +266,8 @@ class RUICalculator:
                     
                     # Log details for Peter Obassa's team
                     if 'peter' in immediate_manager.lower() and 'obasa' in immediate_manager.lower():
-                        print(f"\n>>> FOUND PETER OBASSA'S DIRECT REPORT: {user_email}")
+                        current_user_email = df.at[idx, 'Email']
+                        print(f"\n>>> FOUND PETER OBASSA'S DIRECT REPORT: {current_user_email}")
                         print(f"    Manager: {immediate_manager}")
                         print(f"    Peer group size: {len(peers)}")
                         print(f"    Peer group members:")
