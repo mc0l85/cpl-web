@@ -113,33 +113,42 @@ class CopilotAnalyzer:
             
             if target_user_path:
                 self.update_status("Applying filters...")
-                target_df = pd.read_csv(target_user_path, encoding='utf-8-sig')
-                self.target_df = target_df.copy()  # Store for RUI calculation
-
-                if filters.get('companies'):
-                    vals = set([v.lower() for v in filters['companies']])
-                    if 'Company' in target_df.columns:
-                        target_df = target_df[target_df['Company'].str.lower().isin(vals)]
-                if filters.get('departments'):
-                    vals = set([v.lower() for v in filters['departments']])
-                    if 'Department' in target_df.columns:
-                        target_df = target_df[target_df['Department'].str.lower().isin(vals)]
-                if filters.get('locations'):
-                    vals = set([v.lower() for v in filters['locations']])
-                    if 'City' in target_df.columns:
-                        target_df = target_df[target_df['City'].str.lower().isin(vals)]
-                if filters.get('managers'):
-                    if 'ManagerLine' in target_df.columns:
-                        target_df['ManagerLine_lc'] = target_df['ManagerLine'].str.lower().fillna('')
-                        managers_lc = [m.strip().lower() for m in filters['managers']]
-                        target_df = target_df[target_df['ManagerLine_lc'].apply(lambda s: any(m == part.strip() for part in s.split('->') for m in managers_lc))]
-                filtered_emails_before = len(utilized_emails)
-                utilized_emails = utilized_emails.intersection(set(target_df['UserPrincipalName'].str.lower()))
-                filtered_emails_after = len(utilized_emails)
-
-                # Log the filtering impact
-                if filtered_emails_before != filtered_emails_after:
-                    self.update_status(f"Filtered from {filtered_emails_before} to {filtered_emails_after} users based on target file")
+                try:
+                    target_df = pd.read_csv(target_user_path, encoding='utf-8-sig')
+                    self.target_df = target_df.copy()  # Store for RUI calculation
+                    
+                    # Apply filters only if file was successfully loaded
+                    if filters.get('companies'):
+                        vals = set([v.lower() for v in filters['companies']])
+                        if 'Company' in target_df.columns:
+                            target_df = target_df[target_df['Company'].str.lower().isin(vals)]
+                    if filters.get('departments'):
+                        vals = set([v.lower() for v in filters['departments']])
+                        if 'Department' in target_df.columns:
+                            target_df = target_df[target_df['Department'].str.lower().isin(vals)]
+                    if filters.get('locations'):
+                        vals = set([v.lower() for v in filters['locations']])
+                        if 'City' in target_df.columns:
+                            target_df = target_df[target_df['City'].str.lower().isin(vals)]
+                    if filters.get('managers'):
+                        if 'ManagerLine' in target_df.columns:
+                            target_df['ManagerLine_lc'] = target_df['ManagerLine'].str.lower().fillna('')
+                            managers_lc = [m.strip().lower() for m in filters['managers']]
+                            target_df = target_df[target_df['ManagerLine_lc'].apply(lambda s: any(m == part.strip() for part in s.split('->') for m in managers_lc))]
+                    
+                    filtered_emails_before = len(utilized_emails)
+                    utilized_emails = utilized_emails.intersection(set(target_df['UserPrincipalName'].str.lower()))
+                    filtered_emails_after = len(utilized_emails)
+                    
+                    # Log the filtering impact
+                    if filtered_emails_before != filtered_emails_after:
+                        self.update_status(f"Filtered from {filtered_emails_before} to {filtered_emails_after} users based on target file")
+                    
+                except FileNotFoundError:
+                    print(f"Warning: Manager report file not found: {target_user_path}")
+                    print("Continuing without manager data - will use global peer groups for RUI calculation")
+                    self.target_df = None
+                    # Skip filtering since no target file exists - keep all utilized_emails
             if not utilized_emails: return {'error': "No matching users found to analyze."}
             # Validation: Log the filtering results
             if target_user_path:
@@ -379,29 +388,78 @@ class CopilotAnalyzer:
             reallocation_df, under_utilized_df, top_utilizers_df = self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'For Reallocation'], self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'Under-Utilized'], self.utilized_metrics_df[self.utilized_metrics_df['Classification'] == 'Top Utilizer']
 
             # Calculate RUI scores if manager data is available
-            self.update_status("3a. Calculating Relative Use Index (RUI) scores...")
-            rui_calculator = RUICalculator(self.reference_date)
-            
-            # Use already loaded target_df instead of re-reading the file
-            manager_df = self.target_df
-            
-            # Calculate RUI scores
-            self.utilized_metrics_df = rui_calculator.calculate_rui_scores(
-                self.utilized_metrics_df, 
-                manager_df
-            )
+            try:
+                self.update_status("3a. Calculating Relative Use Index (RUI) scores...")
+                rui_calculator = RUICalculator(self.reference_date)
+                
+                # Use already loaded target_df instead of re-reading the file
+                # Handle case where no manager report is provided
+                manager_df = self.target_df if self.target_df is not None else None
+                
+                if manager_df is None:
+                    self.update_status("3a1. No manager data - using global peer groups...")
+                else:
+                    self.update_status(f"3a1. Processing {len(self.utilized_metrics_df)} users with manager data...")
+                
+                # Calculate RUI scores
+                self.utilized_metrics_df = rui_calculator.calculate_rui_scores(
+                    self.utilized_metrics_df, 
+                    manager_df,
+                    status_callback=self.update_status
+                )
+                
+                self.update_status("3a2. RUI calculation completed successfully")
+                
+            except Exception as e:
+                self.update_status(f"Error in RUI calculation: {str(e)}")
+                print(f"RUI calculation error: {e}")
+                import traceback
+                traceback.print_exc()
+                # Continue without RUI scores
+                pass
             
             # Generate manager summary if we have RUI scores
-            self.manager_summary_df = None
-            if 'rui_score' in self.utilized_metrics_df.columns:
-                self.manager_summary_df = rui_calculator.get_manager_summary(self.utilized_metrics_df)
+            try:
+                self.update_status("3a3. Generating manager summary...")
+                self.manager_summary_df = None
+                if 'rui_score' in self.utilized_metrics_df.columns:
+                    self.manager_summary_df = rui_calculator.get_manager_summary(self.utilized_metrics_df)
+                    if self.manager_summary_df is not None and not self.manager_summary_df.empty:
+                        self.update_status(f"3a4. Manager summary created with {len(self.manager_summary_df)} groups")
+                    else:
+                        self.update_status("3a4. Manager summary is empty - no manager data available")
+                else:
+                    self.update_status("3a4. No RUI scores available - skipping manager summary")
+            except Exception as e:
+                self.update_status(f"Error generating manager summary: {str(e)}")
+                print(f"Manager summary error: {e}")
+                import traceback
+                traceback.print_exc()
+                self.manager_summary_df = None
 
-            self.update_status("4. Calculating usage complexity over time...")
-            usage_complexity_trend_df = self.calculate_usage_complexity_over_time(utilized_emails, filters, target_user_path)
+            try:
+                self.update_status("4. Calculating usage complexity over time...")
+                usage_complexity_trend_df = self.calculate_usage_complexity_over_time(utilized_emails, filters, target_user_path)
+                self.update_status("4a. Usage complexity calculation completed")
+            except Exception as e:
+                self.update_status(f"Error calculating usage complexity: {str(e)}")
+                print(f"Usage complexity error: {e}")
+                import traceback
+                traceback.print_exc()
+                # Create empty dataframe as fallback
+                usage_complexity_trend_df = pd.DataFrame()
 
-            self.update_status("5. Generating reports in memory...")
-            self.update_status("5a. Creating Excel report structure...")
-            excel_bytes = self.create_excel_report(top_utilizers_df, under_utilized_df, reallocation_df, self.utilized_metrics_df, usage_complexity_trend_df, self.manager_summary_df)
+            try:
+                self.update_status("5. Generating reports in memory...")
+                self.update_status("5a. Creating Excel report structure...")
+                excel_bytes = self.create_excel_report(top_utilizers_df, under_utilized_df, reallocation_df, self.utilized_metrics_df, usage_complexity_trend_df, self.manager_summary_df)
+                self.update_status("5b. Excel report generated successfully")
+            except Exception as e:
+                self.update_status(f"Error generating Excel report: {str(e)}")
+                print(f"Excel report error: {e}")
+                import traceback
+                traceback.print_exc()
+                return {'error': f'Failed to generate Excel report: {str(e)}'}
             self.update_status("5b. Generating leaderboard HTML...")
             leaderboard_html = self.create_leaderboard_html(self.utilized_metrics_df)
             self.update_status("5c. Finalizing reports...")

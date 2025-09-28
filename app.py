@@ -57,13 +57,21 @@ def handle_upload():
         session['file_paths']['target'] = save_path
         session.modified = True
         try:
-            df = pd.read_csv(save_path, usecols=['UserPrincipalName', 'Company', 'Department', 'City', 'ManagerLine'], dtype=str, encoding='utf-8-sig')
+            # First read to check available columns
+            df_check = pd.read_csv(save_path, nrows=0, encoding='utf-8-sig')
+            available_cols = df_check.columns.tolist()
+            
+            # Define columns we want to read if they exist
+            desired_cols = ['UserPrincipalName', 'Company', 'Department', 'City', 'ManagerLine']
+            cols_to_read = [col for col in desired_cols if col in available_cols]
+            
+            df = pd.read_csv(save_path, usecols=cols_to_read, dtype=str, encoding='utf-8-sig')
             df.fillna('', inplace=True)
 
             filters = {
-                'companies': sorted(df['Company'].unique().tolist()),
-                'departments': sorted(df['Department'].unique().tolist()),
-                'locations': sorted(df['City'].unique().tolist())
+                'companies': sorted(df['Company'].unique().tolist()) if 'Company' in df.columns else [],
+                'departments': sorted(df['Department'].unique().tolist()) if 'Department' in df.columns else [],
+                'locations': sorted(df['City'].unique().tolist()) if 'City' in df.columns else []
             }
             
             # Check if a preset was used to determine manager filter behavior
@@ -72,10 +80,12 @@ def handle_upload():
                 # If a preset is active, use its managers for the filter dropdown
                 filters['managers'] = TARGET_PRESETS[target_preset_key].get('managers', [])
             else:
-                # Otherwise, extract all managers from the uploaded file
+                # Otherwise, extract all managers from the uploaded file if ManagerLine column exists
                 all_managers = set()
-                for chain in df['ManagerLine']:
-                    all_managers.update([m.strip() for m in chain.split('->') if m])
+                if 'ManagerLine' in df.columns:
+                    for chain in df['ManagerLine']:
+                        if pd.notna(chain) and chain.strip():
+                            all_managers.update([m.strip() for m in chain.split('->') if m.strip()])
                 filters['managers'] = sorted(list(all_managers))
             
             return jsonify({'status': 'success', 'type': 'target', 'filters': filters})

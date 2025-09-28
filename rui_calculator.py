@@ -30,7 +30,7 @@ class RUICalculator:
         """Initialize with reference date for consistent calculations"""
         self.reference_date = pd.to_datetime(reference_date)
     
-    def calculate_rui_scores(self, users_df: pd.DataFrame, manager_df: pd.DataFrame = None) -> pd.DataFrame:
+    def calculate_rui_scores(self, users_df: pd.DataFrame, manager_df: pd.DataFrame = None, status_callback=None) -> pd.DataFrame:
         """
         Calculate RUI scores for all users
         
@@ -42,17 +42,21 @@ class RUICalculator:
             DataFrame with RUI scores and peer group information added
         """
         # Merge manager data if provided
-        if manager_df is not None:
+        if manager_df is not None and not manager_df.empty:
             manager_df = manager_df.copy()
-            manager_df['UserPrincipalName'] = manager_df['UserPrincipalName'].str.lower()
+            if 'UserPrincipalName' in manager_df.columns:
+                manager_df['UserPrincipalName'] = manager_df['UserPrincipalName'].str.lower()
             # Only merge columns that don't already exist in users_df
-            merge_cols = ['UserPrincipalName']
+            merge_cols = []
+            if 'UserPrincipalName' in manager_df.columns:
+                merge_cols.append('UserPrincipalName')
+            
             for col in ['ManagerLine', 'Department', 'Company', 'City']:
                 if col in manager_df.columns and col not in users_df.columns:
                     merge_cols.append(col)
             
-            # Only merge if there are columns to add
-            if len(merge_cols) > 1:
+            # Only merge if there are columns to add and UserPrincipalName exists
+            if len(merge_cols) > 1 and 'UserPrincipalName' in merge_cols:
                 users_df = users_df.merge(
                     manager_df[merge_cols],
                     left_on='Email',
@@ -61,16 +65,34 @@ class RUICalculator:
                 )
         
         # Calculate component scores
+        if status_callback:
+            status_callback("3a2. Calculating recency scores...")
         users_df = self._calculate_recency_scores(users_df)
+        
+        if status_callback:
+            status_callback("3a3. Calculating frequency scores...")
         users_df = self._calculate_frequency_scores(users_df)
+        
+        if status_callback:
+            status_callback("3a4. Calculating breadth scores...")
         users_df = self._calculate_breadth_scores(users_df)
+        
+        if status_callback:
+            status_callback("3a5. Calculating trend scores...")
         users_df = self._calculate_trend_scores(users_df)
         
         # Form peer groups and calculate RUI
-        users_df = self._assign_peer_groups(users_df)
+        if status_callback:
+            status_callback("3a6. Assigning peer groups...")
+        users_df = self._assign_peer_groups(users_df, status_callback)
+        
+        if status_callback:
+            status_callback("3a7. Calculating relative RUI scores...")
         users_df = self._calculate_peer_relative_rui(users_df)
         
         # Add risk classification
+        if status_callback:
+            status_callback("3a8. Classifying risk levels...")
         users_df = self._classify_risk(users_df)
         
         return users_df
@@ -139,7 +161,7 @@ class RUICalculator:
         
         return df
     
-    def _assign_peer_groups(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _assign_peer_groups(self, df: pd.DataFrame, status_callback=None) -> pd.DataFrame:
         """Assign users to peer groups based on manager hierarchy"""
         df = df.copy()
         
@@ -169,7 +191,11 @@ class RUICalculator:
                     manager_to_subordinates[immediate_mgr].append(row.get('Email', ''))
         
         # Process each user to find appropriate peer group
-        for idx, user in df.iterrows():
+        total_users = len(df)
+        for i, (idx, user) in enumerate(df.iterrows()):
+            if status_callback and i % 100 == 0:  # Update every 100 users
+                progress = (i / total_users) * 100
+                status_callback(f"3a6. Processing user {i+1}/{total_users} ({progress:.1f}%)")
             manager_line = user.get('ManagerLine', '')
             
             if pd.isna(manager_line) or manager_line == '':
@@ -252,7 +278,7 @@ class RUICalculator:
                 
                 # Filter out the manager if they exist in the peers
                 for pattern in manager_email_patterns:
-                    peers = peers[~peers['Email'].str.lower().str.contains(pattern, na=False)]
+                    peers = peers[~peers['Email'].str.lower().str.contains(pattern, na=False, regex=False)]
                 
                 if len(peers) >= self.MIN_PEER_GROUP_SIZE:
                     df.at[idx, 'peer_group'] = f"direct_{immediate_manager}"
@@ -285,7 +311,7 @@ class RUICalculator:
                 
                 # Filter out managers
                 for pattern in manager_email_patterns:
-                    peers = peers[~peers['Email'].str.lower().str.contains(pattern, na=False)]
+                    peers = peers[~peers['Email'].str.lower().str.contains(pattern, na=False, regex=False)]
                 
                 if len(peers) >= self.MIN_PEER_GROUP_SIZE:
                     df.at[idx, 'peer_group'] = f"skip_{skip_manager}"
@@ -455,7 +481,19 @@ class RUICalculator:
                 # Store the full chain for each user
                 manager_hierarchy[row['Email']] = managers
         
-        # For each user, find the appropriate management level for reporting
+        # Pre-compute manager counts for efficiency (avoid O(n³) complexity)
+        manager_counts = {}  # {(manager, level): count}
+        
+        # First pass: count all manager relationships
+        for _, row in df.iterrows():
+            mgr_line = row.get('ManagerLine', '')
+            if pd.notna(mgr_line) and mgr_line != '':
+                managers = [m.strip() for m in mgr_line.split('->')]
+                for i, manager in enumerate(managers):
+                    key = (manager, i)
+                    manager_counts[key] = manager_counts.get(key, 0) + 1
+        
+        # Second pass: assign effective managers using pre-computed counts
         for idx, row in df.iterrows():
             mgr_line = row.get('ManagerLine', '')
             if pd.notna(mgr_line) and mgr_line != '':
@@ -463,14 +501,8 @@ class RUICalculator:
                 
                 # Start from immediate manager and work up
                 for i, manager in enumerate(managers):
-                    # Count how many users report to this manager at any level
-                    users_under_manager = 0
-                    for _, other_row in df.iterrows():
-                        if pd.notna(other_row.get('ManagerLine')) and manager in other_row.get('ManagerLine', ''):
-                            # Check if this manager appears at the same position in their chain
-                            other_managers = [m.strip() for m in other_row['ManagerLine'].split('->')]
-                            if i < len(other_managers) and other_managers[i] == manager:
-                                users_under_manager += 1
+                    key = (manager, i)
+                    users_under_manager = manager_counts.get(key, 0)
                     
                     # If this manager has 5+ users, use them as the effective manager
                     if users_under_manager >= self.MIN_PEER_GROUP_SIZE:
@@ -555,9 +587,9 @@ class RUICalculator:
         if len(large_groups) > 0:
             summary = large_groups
         
-        # Sort by action required, then avg RUI
-        summary = summary.sort_values(['Action Required', 'Avg RUI'], 
-                                    ascending=[False, True])
+        # Sort by average RUI score (lowest first), then by action required
+        summary = summary.sort_values(['Avg RUI', 'Action Required'], 
+                                    ascending=[True, False])
         
         # Drop the internal mgmt_level column
         if 'mgmt_level' in summary.columns:
